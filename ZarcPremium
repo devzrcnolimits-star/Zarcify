@@ -1,1 +1,1051 @@
 
+-- ZarcWare | Loadstring compatible
+-- Usage: loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/Zarc"))()
+
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local LocalPlayer      = Players.LocalPlayer
+
+-- ============================================================
+-- CONFIG
+-- ============================================================
+local CONFIG = {
+    Title       = "ZARCWARE",
+    Accent      = Color3.fromRGB(255, 210, 50),
+    Background  = Color3.fromRGB(10, 10, 14),
+    Surface     = Color3.fromRGB(18, 18, 24),
+    Border      = Color3.fromRGB(60, 55, 35),
+    TextPrimary = Color3.fromRGB(255, 240, 200),
+    TextMuted   = Color3.fromRGB(150, 135, 90),
+    PixelFont   = Enum.Font.Arcade,
+    ToggleKey   = Enum.KeyCode.RightAlt,
+
+    HighlightColors = {
+        { Name = "Green",  Color = Color3.fromRGB(88,  214, 141) },
+        { Name = "Red",    Color = Color3.fromRGB(231, 76,  60)  },
+        { Name = "Yellow", Color = Color3.fromRGB(243, 156, 18)  },
+        { Name = "Blue",   Color = Color3.fromRGB(88,  166, 255) },
+        { Name = "Purple", Color = Color3.fromRGB(198, 120, 221) },
+        { Name = "White",  Color = Color3.fromRGB(255, 255, 255) },
+    },
+}
+
+local PF = CONFIG.PixelFont
+
+-- ============================================================
+-- STATE
+-- ============================================================
+local State = {
+    Visible          = true,
+    Dragging         = false,
+    SelectedPlayer   = nil,
+    HighlightColor   = CONFIG.HighlightColors[1].Color,
+    Transparency     = 0.5,
+    FillEnabled      = true,
+    OutlineOnly      = false,
+    PlayerHighlights = {},
+    Logs             = {},
+    Flying           = false,
+    FlySpeed         = 60,
+    FlyConnection    = nil,
+    FlyBodyVel       = nil,
+    FlyBodyGyro      = nil,
+}
+
+-- ============================================================
+-- UTILITIES
+-- ============================================================
+local function Log(msg)
+    table.insert(State.Logs, 1, string.format("[%.1fs] %s", os.clock(), msg))
+    if #State.Logs > 50 then table.remove(State.Logs) end
+end
+
+local function Tween(obj, info, props)
+    TweenService:Create(obj, info, props):Play()
+end
+
+local function MakePadding(parent, top, right, bottom, left)
+    local p = Instance.new("UIPadding")
+    p.PaddingTop    = UDim.new(0, top    or 0)
+    p.PaddingRight  = UDim.new(0, right  or 0)
+    p.PaddingBottom = UDim.new(0, bottom or 0)
+    p.PaddingLeft   = UDim.new(0, left   or 0)
+    p.Parent = parent
+    return p
+end
+
+local function MakeCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 4)
+    c.Parent = parent
+    return c
+end
+
+local function MakeStroke(parent, color, thickness)
+    local s = Instance.new("UIStroke")
+    s.Color     = color or CONFIG.Border
+    s.Thickness = thickness or 1
+    s.Parent    = parent
+    return s
+end
+
+local function Label(parent, text, size, color, xalign)
+    local l = Instance.new("TextLabel")
+    l.BackgroundTransparency = 1
+    l.Text           = text
+    l.TextColor3     = color  or CONFIG.TextPrimary
+    l.TextSize       = size   or 14
+    l.Font           = PF
+    l.TextXAlignment = xalign or Enum.TextXAlignment.Left
+    l.Parent         = parent
+    return l
+end
+
+local function PixelBtn(parent, text, bgColor, size, pos)
+    local btn = Instance.new("TextButton")
+    btn.Size             = size   or UDim2.new(1,0,0,30)
+    btn.Position         = pos    or UDim2.new(0,0,0,0)
+    btn.BackgroundColor3 = bgColor or CONFIG.Surface
+    btn.TextColor3       = Color3.new(1,1,1)
+    btn.Text             = text
+    btn.TextSize         = 13
+    btn.Font             = PF
+    btn.BorderSizePixel  = 0
+    btn.Parent           = parent
+    MakeCorner(btn, 2)
+    MakeStroke(btn, CONFIG.Border, 1)
+    return btn
+end
+
+-- ============================================================
+-- FLY SYSTEM
+-- ============================================================
+local function StartFly()
+    local char = LocalPlayer.Character
+    if not char then Log("NO CHARACTER"); return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    hum.PlatformStand = true
+
+    local bv = Instance.new("BodyVelocity")
+    bv.Velocity  = Vector3.zero
+    bv.MaxForce  = Vector3.new(1e5, 1e5, 1e5)
+    bv.Parent    = hrp
+    State.FlyBodyVel = bv
+
+    local bg = Instance.new("BodyGyro")
+    bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+    bg.D         = 100
+    bg.CFrame    = hrp.CFrame
+    bg.Parent    = hrp
+    State.FlyBodyGyro = bg
+
+    State.FlyConnection = RunService.Heartbeat:Connect(function()
+        local cam = workspace.CurrentCamera
+        if not cam or not hrp or not hrp.Parent then return end
+        local dir = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector  end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space)       then dir = dir + Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0,1,0) end
+        bv.Velocity = dir.Magnitude > 0 and dir.Unit * State.FlySpeed or Vector3.zero
+        bg.CFrame   = cam.CFrame
+    end)
+
+    State.Flying = true
+    Log("FLY ON | WASD + SPACE + CTRL")
+end
+
+local function StopFly()
+    if State.FlyConnection then State.FlyConnection:Disconnect(); State.FlyConnection = nil end
+    if State.FlyBodyVel    then State.FlyBodyVel:Destroy();    State.FlyBodyVel    = nil end
+    if State.FlyBodyGyro   then State.FlyBodyGyro:Destroy();   State.FlyBodyGyro   = nil end
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end
+    State.Flying = false
+    Log("FLY OFF")
+end
+
+local function ToggleFly()
+    if State.Flying then StopFly() else StartFly() end
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if State.Flying then StopFly(); StartFly() end
+end)
+
+-- ============================================================
+-- HIGHLIGHT ENGINE
+-- ============================================================
+local function GetHighlight(player)
+    return State.PlayerHighlights[player]
+end
+
+local function ApplyHighlight(player, color, transparency, fillEnabled, outlineOnly)
+    if not player or not player.Character then
+        Log("NO CHAR: " .. (player and player.Name or "?")); return
+    end
+    local ex = GetHighlight(player)
+    if ex then ex:Destroy() end
+    local hl = Instance.new("Highlight")
+    hl.FillColor           = color or State.HighlightColor
+    hl.OutlineColor        = color or State.HighlightColor
+    hl.FillTransparency    = (not fillEnabled or outlineOnly) and 1 or (transparency or State.Transparency)
+    hl.OutlineTransparency = 0
+    hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Adornee             = player.Character
+    hl.Parent              = player.Character
+    State.PlayerHighlights[player] = hl
+    Log("HL ON: " .. player.Name)
+    player.CharacterAdded:Connect(function(char)
+        task.wait(0.1)
+        if GetHighlight(player) then
+            local h2 = Instance.new("Highlight")
+            h2.FillColor           = hl.FillColor
+            h2.OutlineColor        = hl.OutlineColor
+            h2.FillTransparency    = hl.FillTransparency
+            h2.OutlineTransparency = 0
+            h2.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
+            h2.Adornee             = char
+            h2.Parent              = char
+            State.PlayerHighlights[player] = h2
+        end
+    end)
+end
+
+local function RemoveHighlight(player)
+    local hl = GetHighlight(player)
+    if hl then
+        hl:Destroy()
+        State.PlayerHighlights[player] = nil
+        Log("HL OFF: " .. player.Name)
+    end
+end
+
+local function HighlightAll()
+    for _, p in ipairs(Players:GetPlayers()) do
+        ApplyHighlight(p, State.HighlightColor, State.Transparency, State.FillEnabled, State.OutlineOnly)
+    end
+    Log("ALL HIGHLIGHTED")
+end
+
+local function ClearAll()
+    for p in pairs(State.PlayerHighlights) do RemoveHighlight(p) end
+    Log("ALL CLEARED")
+end
+
+-- ============================================================
+-- SCREEN GUI + WINDOW
+-- ============================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name           = "ZarcWare"
+ScreenGui.ResetOnSpawn   = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent         = LocalPlayer:WaitForChild("PlayerGui")
+
+local Window = Instance.new("Frame")
+Window.Name             = "Window"
+Window.Size             = UDim2.new(0, 530, 0, 500)
+Window.Position         = UDim2.new(0.5,-265,0.5,-250)
+Window.BackgroundColor3 = CONFIG.Background
+Window.BorderSizePixel  = 0
+Window.Parent           = ScreenGui
+MakeCorner(Window, 4)
+MakeStroke(Window, CONFIG.Border, 1)
+
+-- ---- Title Bar ----
+local TitleBar = Instance.new("Frame")
+TitleBar.Name             = "TitleBar"
+TitleBar.Size             = UDim2.new(1,0,0,38)
+TitleBar.BackgroundColor3 = CONFIG.Surface
+TitleBar.BorderSizePixel  = 0
+TitleBar.Parent           = Window
+MakeCorner(TitleBar, 4)
+MakeStroke(TitleBar, CONFIG.Border, 1)
+
+local AccentBar = Instance.new("Frame")
+AccentBar.Size             = UDim2.new(1,0,0,2)
+AccentBar.BackgroundColor3 = CONFIG.Accent
+AccentBar.BorderSizePixel  = 0
+AccentBar.Parent           = TitleBar
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Text             = "> ZARCWARE_"
+TitleLabel.Size             = UDim2.new(0,140,1,0)
+TitleLabel.Position         = UDim2.new(0,12,0,0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.TextColor3       = CONFIG.Accent
+TitleLabel.TextSize         = 16
+TitleLabel.Font             = PF
+TitleLabel.TextXAlignment   = Enum.TextXAlignment.Left
+TitleLabel.Parent           = TitleBar
+
+-- Premium badge subtitle
+local PremiumBadge = Instance.new("Frame")
+PremiumBadge.Size             = UDim2.new(0,76,0,18)
+PremiumBadge.Position         = UDim2.new(0,158,0.5,-9)
+PremiumBadge.BackgroundColor3 = Color3.fromRGB(30, 25, 8)
+PremiumBadge.BorderSizePixel  = 0
+PremiumBadge.Parent           = TitleBar
+MakeCorner(PremiumBadge, 2)
+MakeStroke(PremiumBadge, CONFIG.Accent, 1)
+
+local PremiumLabel = Instance.new("TextLabel")
+PremiumLabel.Text             = "* PREMIUM"
+PremiumLabel.Size             = UDim2.new(1,0,1,0)
+PremiumLabel.BackgroundTransparency = 1
+PremiumLabel.TextColor3       = CONFIG.Accent
+PremiumLabel.TextSize         = 10
+PremiumLabel.Font             = PF
+PremiumLabel.Parent           = PremiumBadge
+
+-- blinking cursor
+local blinkOn = true
+RunService.Heartbeat:Connect(function()
+    if math.floor(os.clock() * 2) % 2 == 0 then
+        if not blinkOn then TitleLabel.Text = "> ZARCWARE_"; blinkOn = true end
+    else
+        if blinkOn then TitleLabel.Text = "> ZARCWARE "; blinkOn = false end
+    end
+end)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Text             = "[X]"
+CloseBtn.Size             = UDim2.new(0,40,0,26)
+CloseBtn.Position         = UDim2.new(1,-48,0.5,-13)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180,40,40)
+CloseBtn.TextColor3       = Color3.new(1,1,1)
+CloseBtn.TextSize         = 13
+CloseBtn.Font             = PF
+CloseBtn.BorderSizePixel  = 0
+CloseBtn.Parent           = TitleBar
+MakeCorner(CloseBtn, 2)
+CloseBtn.MouseButton1Click:Connect(function()
+    if State.Flying then StopFly() end
+    ScreenGui:Destroy()
+end)
+
+local dragStart, startPos
+TitleBar.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        State.Dragging = true; dragStart = i.Position; startPos = Window.Position
+    end
+end)
+TitleBar.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then State.Dragging = false end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if State.Dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+        local d = i.Position - dragStart
+        Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y)
+    end
+end)
+
+-- ---- Tab Bar ----
+local TabStates = {}
+
+local TabBar = Instance.new("Frame")
+TabBar.Name             = "TabBar"
+TabBar.Size             = UDim2.new(1,0,0,30)
+TabBar.Position         = UDim2.new(0,0,0,38)
+TabBar.BackgroundColor3 = CONFIG.Background
+TabBar.BorderSizePixel  = 0
+TabBar.Parent           = Window
+
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.SortOrder     = Enum.SortOrder.LayoutOrder
+TabLayout.Parent        = TabBar
+
+local TabNames = {"PLAYERS","HIGHLIGHTS","FLY","SPEED","INFO"}
+
+local function SetTab(name)
+    for _, t in pairs(TabStates) do
+        local a = t.Name == name
+        t.Btn.BackgroundColor3 = a and CONFIG.Accent or CONFIG.Surface
+        t.Lbl.TextColor3       = a and CONFIG.Background or CONFIG.TextMuted
+    end
+    for _, f in ipairs(Window:GetChildren()) do
+        if f:IsA("Frame") and f.Name:match("^TAB_") then
+            f.Visible = (f.Name == "TAB_"..name)
+        end
+    end
+end
+
+for i, name in ipairs(TabNames) do
+    local btn = Instance.new("TextButton")
+    btn.Size             = UDim2.new(0,76,1,0)
+    btn.BackgroundColor3 = CONFIG.Surface
+    btn.Text             = ""
+    btn.BorderSizePixel  = 0
+    btn.LayoutOrder      = i
+    btn.Parent           = TabBar
+    MakeStroke(btn, CONFIG.Border, 1)
+    local lbl = Instance.new("TextLabel")
+    lbl.Text              = name
+    lbl.Size              = UDim2.new(1,0,1,0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3        = CONFIG.TextMuted
+    lbl.TextSize          = 11
+    lbl.Font              = PF
+    lbl.Parent            = btn
+    TabStates[name] = {Name=name, Btn=btn, Lbl=lbl}
+    btn.MouseButton1Click:Connect(function() SetTab(name) end)
+end
+
+local Sep = Instance.new("Frame")
+Sep.Size             = UDim2.new(1,0,0,1)
+Sep.Position         = UDim2.new(0,0,0,68)
+Sep.BackgroundColor3 = CONFIG.Border
+Sep.BorderSizePixel  = 0
+Sep.Parent           = Window
+
+-- helper
+local function MakeTabFrame(name)
+    local f = Instance.new("Frame")
+    f.Name                   = "TAB_"..name
+    f.Size                   = UDim2.new(1,0,1,-130)
+    f.Position               = UDim2.new(0,0,0,70)
+    f.BackgroundTransparency = 1
+    f.Visible                = false
+    f.Parent                 = Window
+    MakePadding(f,8,8,8,8)
+    return f
+end
+
+-- ============================================================
+-- TAB: PLAYERS
+-- ============================================================
+local TPlayers = MakeTabFrame("PLAYERS")
+
+local PlayerListFrame = Instance.new("ScrollingFrame")
+PlayerListFrame.Size               = UDim2.new(0,290,1,0)
+PlayerListFrame.BackgroundTransparency = 1
+PlayerListFrame.ScrollBarThickness = 3
+PlayerListFrame.CanvasSize         = UDim2.new(0,0,0,0)
+PlayerListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+PlayerListFrame.Parent             = TPlayers
+
+local PLLayout = Instance.new("UIListLayout")
+PLLayout.SortOrder = Enum.SortOrder.Name
+PLLayout.Padding   = UDim.new(0,4)
+PLLayout.Parent    = PlayerListFrame
+
+local RightPanel = Instance.new("Frame")
+RightPanel.Size              = UDim2.new(0,196,1,0)
+RightPanel.Position          = UDim2.new(0,298,0,0)
+RightPanel.BackgroundTransparency = 1
+RightPanel.Parent            = TPlayers
+
+local BtnApply  = PixelBtn(RightPanel,"APPLY HL",    Color3.fromRGB(31,111,235),UDim2.new(1,0,0,30),UDim2.new(0,0,0,0))
+local BtnRemove = PixelBtn(RightPanel,"REMOVE HL",   Color3.fromRGB(180,40,40), UDim2.new(1,0,0,30),UDim2.new(0,0,0,36))
+local BtnAll    = PixelBtn(RightPanel,"HL ALL",      Color3.fromRGB(35,134,54), UDim2.new(1,0,0,30),UDim2.new(0,0,0,72))
+local BtnClear  = PixelBtn(RightPanel,"CLEAR ALL",   Color3.fromRGB(60,68,80),  UDim2.new(1,0,0,30),UDim2.new(0,0,0,108))
+
+BtnApply.MouseButton1Click:Connect(function()
+    if State.SelectedPlayer then
+        ApplyHighlight(State.SelectedPlayer,State.HighlightColor,State.Transparency,State.FillEnabled,State.OutlineOnly)
+    else Log("SELECT A PLAYER") end
+end)
+BtnRemove.MouseButton1Click:Connect(function()
+    if State.SelectedPlayer then RemoveHighlight(State.SelectedPlayer) else Log("SELECT A PLAYER") end
+end)
+BtnAll.MouseButton1Click:Connect(HighlightAll)
+BtnClear.MouseButton1Click:Connect(ClearAll)
+
+local PlayerRows = {}
+
+local function MakePlayerRow(player)
+    local row = Instance.new("TextButton")
+    row.Name             = player.Name
+    row.Size             = UDim2.new(1,0,0,44)
+    row.BackgroundColor3 = CONFIG.Surface
+    row.Text             = ""
+    row.AutoButtonColor  = false
+    row.BorderSizePixel  = 0
+    row.Parent           = PlayerListFrame
+    MakeCorner(row,2)
+    local stroke = MakeStroke(row,CONFIG.Border,1)
+
+    local avc = ({Color3.fromRGB(31,111,235),Color3.fromRGB(137,87,229),Color3.fromRGB(35,134,54),Color3.fromRGB(180,40,40),Color3.fromRGB(163,113,31)})[(#player.Name%5)+1]
+
+    local av = Instance.new("Frame")
+    av.Size             = UDim2.new(0,28,0,28)
+    av.Position         = UDim2.new(0,8,0.5,-14)
+    av.BackgroundColor3 = avc
+    av.BorderSizePixel  = 0
+    av.Parent           = row
+    MakeCorner(av,2)
+
+    local initL = Label(av, player.Name:sub(1,2):upper(), 11, Color3.new(1,1,1))
+    initL.Size = UDim2.new(1,0,1,0)
+
+    local nameL = Label(row, player.Name, 12, CONFIG.TextPrimary)
+    nameL.Size         = UDim2.new(1,-55,0,16)
+    nameL.Position     = UDim2.new(0,44,0,8)
+    nameL.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local dot = Instance.new("Frame")
+    dot.Size             = UDim2.new(0,8,0,8)
+    dot.Position         = UDim2.new(1,-14,0.5,-4)
+    dot.BackgroundColor3 = Color3.fromRGB(44,52,68)
+    dot.BorderSizePixel  = 0
+    dot.Parent           = row
+    MakeCorner(dot,4)
+
+    row.MouseButton1Click:Connect(function()
+        State.SelectedPlayer = player
+        for _, r in pairs(PlayerRows) do
+            r.Stroke.Color           = CONFIG.Border
+            r.Frame.BackgroundColor3 = CONFIG.Surface
+        end
+        stroke.Color             = CONFIG.Accent
+        row.BackgroundColor3     = Color3.fromRGB(15,30,55)
+        Log("SELECTED: "..player.Name)
+    end)
+
+    PlayerRows[player] = {Frame=row, Dot=dot, Stroke=stroke}
+    return row
+end
+
+local function RefreshPlayers()
+    for _, c in ipairs(PlayerListFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    PlayerRows = {}
+    for _, p in ipairs(Players:GetPlayers()) do MakePlayerRow(p) end
+end
+
+Players.PlayerAdded:Connect(function(p) MakePlayerRow(p); Log("JOINED: "..p.Name) end)
+Players.PlayerRemoving:Connect(function(p)
+    if PlayerRows[p] then PlayerRows[p].Frame:Destroy(); PlayerRows[p]=nil end
+    if State.SelectedPlayer == p then State.SelectedPlayer = nil end
+    RemoveHighlight(p); Log("LEFT: "..p.Name)
+end)
+RefreshPlayers()
+
+-- ============================================================
+-- TAB: HIGHLIGHTS
+-- ============================================================
+local THighlights = MakeTabFrame("HIGHLIGHTS")
+
+local clrLbl = Label(THighlights,"SELECT COLOR:",12,CONFIG.TextMuted)
+clrLbl.Size     = UDim2.new(1,0,0,16)
+clrLbl.Position = UDim2.new(0,0,0,0)
+
+local ColorRow = Instance.new("Frame")
+ColorRow.Size              = UDim2.new(1,0,0,36)
+ColorRow.Position          = UDim2.new(0,0,0,20)
+ColorRow.BackgroundTransparency = 1
+ColorRow.Parent            = THighlights
+
+local CRL = Instance.new("UIListLayout")
+CRL.FillDirection = Enum.FillDirection.Horizontal
+CRL.Padding       = UDim.new(0,6)
+CRL.Parent        = ColorRow
+
+local ACS = nil
+for _, c in ipairs(CONFIG.HighlightColors) do
+    local btn = Instance.new("TextButton")
+    btn.Size             = UDim2.new(0,36,0,36)
+    btn.BackgroundColor3 = c.Color
+    btn.Text             = ""
+    btn.BorderSizePixel  = 0
+    btn.Parent           = ColorRow
+    MakeCorner(btn,2)
+    local s = MakeStroke(btn,Color3.new(1,1,1),0)
+    btn.MouseButton1Click:Connect(function()
+        if ACS then ACS.Thickness=0 end
+        s.Thickness=2; ACS=s
+        State.HighlightColor=c.Color; Log("COLOR: "..c.Name)
+    end)
+    if c.Color == State.HighlightColor then s.Thickness=2; ACS=s end
+end
+
+local trLbl = Label(THighlights,"FILL TRANSPARENCY:",12,CONFIG.TextMuted)
+trLbl.Size     = UDim2.new(1,0,0,16)
+trLbl.Position = UDim2.new(0,0,0,68)
+
+local STrack = Instance.new("Frame")
+STrack.Size             = UDim2.new(1,0,0,6)
+STrack.Position         = UDim2.new(0,0,0,92)
+STrack.BackgroundColor3 = CONFIG.Border
+STrack.BorderSizePixel  = 0
+STrack.Parent           = THighlights
+MakeCorner(STrack,2)
+
+local SFill = Instance.new("Frame")
+SFill.Size              = UDim2.new(State.Transparency,0,1,0)
+SFill.BackgroundColor3  = CONFIG.Accent
+SFill.BorderSizePixel   = 0
+SFill.Parent            = STrack
+MakeCorner(SFill,2)
+
+local SHandle = Instance.new("TextButton")
+SHandle.Size            = UDim2.new(0,16,0,16)
+SHandle.Position        = UDim2.new(State.Transparency,-8,0.5,-8)
+SHandle.BackgroundColor3 = Color3.new(1,1,1)
+SHandle.Text            = ""
+SHandle.BorderSizePixel = 0
+SHandle.Parent          = STrack
+MakeCorner(SHandle,2)
+
+local trValLbl = Label(THighlights,"VAL: 0.5",12,CONFIG.TextPrimary)
+trValLbl.Size     = UDim2.new(1,0,0,14)
+trValLbl.Position = UDim2.new(0,0,0,106)
+
+local sDrag = false
+SHandle.MouseButton1Down:Connect(function() sDrag=true end)
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then sDrag=false end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if sDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
+        local rel = math.clamp((i.Position.X-STrack.AbsolutePosition.X)/STrack.AbsoluteSize.X,0,1)
+        State.Transparency     = math.floor(rel*10)/10
+        SFill.Size             = UDim2.new(rel,0,1,0)
+        SHandle.Position       = UDim2.new(rel,-8,0.5,-8)
+        trValLbl.Text          = "VAL: "..tostring(State.Transparency)
+    end
+end)
+
+local function MakeToggle(parent, labelText, yPos, default, callback)
+    local container = Instance.new("Frame")
+    container.Size              = UDim2.new(1,0,0,28)
+    container.Position          = UDim2.new(0,0,0,yPos)
+    container.BackgroundTransparency = 1
+    container.Parent            = parent
+    local lbl = Label(container,labelText,13,CONFIG.TextPrimary)
+    lbl.Size = UDim2.new(0.7,0,1,0)
+    local track = Instance.new("TextButton")
+    track.Size             = UDim2.new(0,42,0,20)
+    track.Position         = UDim2.new(1,-42,0.5,-10)
+    track.BackgroundColor3 = default and Color3.fromRGB(35,134,54) or CONFIG.Border
+    track.Text             = default and "ON" or "OFF"
+    track.TextSize         = 10
+    track.Font             = PF
+    track.TextColor3       = Color3.new(1,1,1)
+    track.BorderSizePixel  = 0
+    track.Parent           = container
+    MakeCorner(track,2)
+    local on = default
+    track.MouseButton1Click:Connect(function()
+        on = not on
+        Tween(track,TweenInfo.new(0.12),{BackgroundColor3=on and Color3.fromRGB(35,134,54) or CONFIG.Border})
+        track.Text = on and "ON" or "OFF"
+        callback(on)
+    end)
+end
+
+MakeToggle(THighlights,"FILL ENABLED",130,true, function(v) State.FillEnabled=v end)
+MakeToggle(THighlights,"OUTLINE ONLY",164,false,function(v) State.OutlineOnly=v  end)
+
+-- ============================================================
+-- TAB: FLY
+-- ============================================================
+local TFly = MakeTabFrame("FLY")
+
+local flyTitle = Label(TFly,"FLY MODE",18,CONFIG.Accent,Enum.TextXAlignment.Center)
+flyTitle.Size     = UDim2.new(1,0,0,24)
+flyTitle.Position = UDim2.new(0,0,0,0)
+
+local flyStatus = Label(TFly,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
+flyStatus.Size     = UDim2.new(1,0,0,18)
+flyStatus.Position = UDim2.new(0,0,0,30)
+
+local flyToggleBtn = PixelBtn(TFly,"[ TOGGLE FLY ]",CONFIG.Accent,UDim2.new(0.6,0,0,38),UDim2.new(0.2,0,0,58))
+flyToggleBtn.TextColor3 = CONFIG.Background
+
+local spLbl = Label(TFly,"FLY SPEED:",12,CONFIG.TextMuted)
+spLbl.Size     = UDim2.new(1,0,0,16)
+spLbl.Position = UDim2.new(0,0,0,112)
+
+local SpTrack = Instance.new("Frame")
+SpTrack.Size             = UDim2.new(1,0,0,6)
+SpTrack.Position         = UDim2.new(0,0,0,136)
+SpTrack.BackgroundColor3 = CONFIG.Border
+SpTrack.BorderSizePixel  = 0
+SpTrack.Parent           = TFly
+MakeCorner(SpTrack,2)
+
+local SpFill = Instance.new("Frame")
+SpFill.Size              = UDim2.new(0.3,0,1,0)
+SpFill.BackgroundColor3  = CONFIG.Accent
+SpFill.BorderSizePixel   = 0
+SpFill.Parent            = SpTrack
+MakeCorner(SpFill,2)
+
+local SpHandle = Instance.new("TextButton")
+SpHandle.Size            = UDim2.new(0,16,0,16)
+SpHandle.Position        = UDim2.new(0.3,-8,0.5,-8)
+SpHandle.BackgroundColor3 = Color3.new(1,1,1)
+SpHandle.Text            = ""
+SpHandle.BorderSizePixel = 0
+SpHandle.Parent          = SpTrack
+MakeCorner(SpHandle,2)
+
+local spValLbl = Label(TFly,"SPEED: 60",12,CONFIG.TextPrimary)
+spValLbl.Size     = UDim2.new(1,0,0,14)
+spValLbl.Position = UDim2.new(0,0,0,150)
+
+local spDrag = false
+SpHandle.MouseButton1Down:Connect(function() spDrag=true end)
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then spDrag=false end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if spDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
+        local rel = math.clamp((i.Position.X-SpTrack.AbsolutePosition.X)/SpTrack.AbsoluteSize.X,0,1)
+        State.FlySpeed     = math.floor(rel*190+10)
+        SpFill.Size        = UDim2.new(rel,0,1,0)
+        SpHandle.Position  = UDim2.new(rel,-8,0.5,-8)
+        spValLbl.Text      = "SPEED: "..tostring(State.FlySpeed)
+    end
+end)
+
+local flyKeysLbl = Label(TFly,"WASD=MOVE | SPACE=UP | CTRL=DOWN",11,CONFIG.TextMuted,Enum.TextXAlignment.Center)
+flyKeysLbl.Size     = UDim2.new(1,0,0,14)
+flyKeysLbl.Position = UDim2.new(0,0,0,172)
+
+flyToggleBtn.MouseButton1Click:Connect(function()
+    ToggleFly()
+    if State.Flying then
+        flyStatus.Text       = "STATUS: ON"
+        flyStatus.TextColor3 = Color3.fromRGB(88,214,141)
+        flyToggleBtn.BackgroundColor3 = Color3.fromRGB(35,134,54)
+    else
+        flyStatus.Text       = "STATUS: OFF"
+        flyStatus.TextColor3 = Color3.fromRGB(180,40,40)
+        flyToggleBtn.BackgroundColor3 = CONFIG.Accent
+    end
+end)
+
+-- ============================================================
+-- TAB: SPEED
+-- ============================================================
+local TSpeed = MakeTabFrame("SPEED")
+
+local State_WalkSpeed   = 16
+local State_JumpPower   = 50
+local State_SpeedActive = false
+
+local speedTitle = Label(TSpeed,"SPEED HACK",18,CONFIG.Accent,Enum.TextXAlignment.Center)
+speedTitle.Size     = UDim2.new(1,0,0,24)
+speedTitle.Position = UDim2.new(0,0,0,0)
+
+local speedStatus = Label(TSpeed,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
+speedStatus.Size     = UDim2.new(1,0,0,18)
+speedStatus.Position = UDim2.new(0,0,0,28)
+
+local speedToggleBtn = PixelBtn(TSpeed,"[ TOGGLE SPEED ]",CONFIG.Accent,UDim2.new(0.6,0,0,36),UDim2.new(0.2,0,0,52))
+speedToggleBtn.TextColor3 = CONFIG.Background
+
+local function ApplySpeed()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.WalkSpeed = State_SpeedActive and State_WalkSpeed or 16
+        hum.JumpPower = State_SpeedActive and State_JumpPower or 50
+    end
+end
+
+-- re-apply on respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if State_SpeedActive then ApplySpeed() end
+end)
+
+speedToggleBtn.MouseButton1Click:Connect(function()
+    State_SpeedActive = not State_SpeedActive
+    ApplySpeed()
+    if State_SpeedActive then
+        speedStatus.Text       = "STATUS: ON"
+        speedStatus.TextColor3 = Color3.fromRGB(88,214,141)
+        speedToggleBtn.BackgroundColor3 = Color3.fromRGB(35,134,54)
+        Log("SPEED ON | WS:"..State_WalkSpeed.." JP:"..State_JumpPower)
+    else
+        speedStatus.Text       = "STATUS: OFF"
+        speedStatus.TextColor3 = Color3.fromRGB(180,40,40)
+        speedToggleBtn.BackgroundColor3 = CONFIG.Accent
+        Log("SPEED OFF")
+    end
+end)
+
+-- WalkSpeed slider
+local wsLbl = Label(TSpeed,"WALKSPEED:",12,CONFIG.TextMuted)
+wsLbl.Size     = UDim2.new(1,0,0,14)
+wsLbl.Position = UDim2.new(0,0,0,100)
+
+local WSTrack = Instance.new("Frame")
+WSTrack.Size             = UDim2.new(1,0,0,6)
+WSTrack.Position         = UDim2.new(0,0,0,120)
+WSTrack.BackgroundColor3 = CONFIG.Border
+WSTrack.BorderSizePixel  = 0
+WSTrack.Parent           = TSpeed
+MakeCorner(WSTrack,2)
+
+local WSFill = Instance.new("Frame")
+WSFill.Size              = UDim2.new((16-16)/(500-16),0,1,0)
+WSFill.BackgroundColor3  = CONFIG.Accent
+WSFill.BorderSizePixel   = 0
+WSFill.Parent            = WSTrack
+MakeCorner(WSFill,2)
+
+local WSHandle = Instance.new("TextButton")
+WSHandle.Size            = UDim2.new(0,16,0,16)
+WSHandle.Position        = UDim2.new(0,-8,0.5,-8)
+WSHandle.BackgroundColor3 = Color3.new(1,1,1)
+WSHandle.Text            = ""
+WSHandle.BorderSizePixel = 0
+WSHandle.Parent          = WSTrack
+MakeCorner(WSHandle,2)
+
+local wsValLbl = Label(TSpeed,"WS: 16",12,CONFIG.TextPrimary)
+wsValLbl.Size     = UDim2.new(1,0,0,14)
+wsValLbl.Position = UDim2.new(0,0,0,134)
+
+local wsDrag = false
+WSHandle.MouseButton1Down:Connect(function() wsDrag=true end)
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then wsDrag=false end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if wsDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
+        local rel = math.clamp((i.Position.X-WSTrack.AbsolutePosition.X)/WSTrack.AbsoluteSize.X,0,1)
+        State_WalkSpeed     = math.floor(rel*484+16)
+        WSFill.Size         = UDim2.new(rel,0,1,0)
+        WSHandle.Position   = UDim2.new(rel,-8,0.5,-8)
+        wsValLbl.Text       = "WS: "..tostring(State_WalkSpeed)
+        if State_SpeedActive then ApplySpeed() end
+    end
+end)
+
+-- JumpPower slider
+local jpLbl = Label(TSpeed,"JUMPPOWER:",12,CONFIG.TextMuted)
+jpLbl.Size     = UDim2.new(1,0,0,14)
+jpLbl.Position = UDim2.new(0,0,0,160)
+
+local JPTrack = Instance.new("Frame")
+JPTrack.Size             = UDim2.new(1,0,0,6)
+JPTrack.Position         = UDim2.new(0,0,0,180)
+JPTrack.BackgroundColor3 = CONFIG.Border
+JPTrack.BorderSizePixel  = 0
+JPTrack.Parent           = TSpeed
+MakeCorner(JPTrack,2)
+
+local JPFill = Instance.new("Frame")
+JPFill.Size              = UDim2.new(0.1,0,1,0)
+JPFill.BackgroundColor3  = CONFIG.Accent
+JPFill.BorderSizePixel   = 0
+JPFill.Parent            = JPTrack
+MakeCorner(JPFill,2)
+
+local JPHandle = Instance.new("TextButton")
+JPHandle.Size            = UDim2.new(0,16,0,16)
+JPHandle.Position        = UDim2.new(0.1,-8,0.5,-8)
+JPHandle.BackgroundColor3 = Color3.new(1,1,1)
+JPHandle.Text            = ""
+JPHandle.BorderSizePixel = 0
+JPHandle.Parent          = JPTrack
+MakeCorner(JPHandle,2)
+
+local jpValLbl = Label(TSpeed,"JP: 50",12,CONFIG.TextPrimary)
+jpValLbl.Size     = UDim2.new(1,0,0,14)
+jpValLbl.Position = UDim2.new(0,0,0,194)
+
+local jpDrag = false
+JPHandle.MouseButton1Down:Connect(function() jpDrag=true end)
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then jpDrag=false end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if jpDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
+        local rel = math.clamp((i.Position.X-JPTrack.AbsolutePosition.X)/JPTrack.AbsoluteSize.X,0,1)
+        State_JumpPower     = math.floor(rel*450+50)
+        JPFill.Size         = UDim2.new(rel,0,1,0)
+        JPHandle.Position   = UDim2.new(rel,-8,0.5,-8)
+        jpValLbl.Text       = "JP: "..tostring(State_JumpPower)
+        if State_SpeedActive then ApplySpeed() end
+    end
+end)
+
+-- Reset button
+local resetSpeedBtn = PixelBtn(TSpeed,"[ RESET DEFAULTS ]",Color3.fromRGB(60,50,20),UDim2.new(0.6,0,0,30),UDim2.new(0.2,0,0,220))
+resetSpeedBtn.MouseButton1Click:Connect(function()
+    State_WalkSpeed = 16; State_JumpPower = 50; State_SpeedActive = false
+    ApplySpeed()
+    local wsRel = 0
+    WSFill.Size       = UDim2.new(wsRel,0,1,0)
+    WSHandle.Position = UDim2.new(wsRel,-8,0.5,-8)
+    wsValLbl.Text     = "WS: 16"
+    local jpRel = 0
+    JPFill.Size       = UDim2.new(jpRel,0,1,0)
+    JPHandle.Position = UDim2.new(jpRel,-8,0.5,-8)
+    jpValLbl.Text     = "JP: 50"
+    speedStatus.Text       = "STATUS: OFF"
+    speedStatus.TextColor3 = Color3.fromRGB(180,40,40)
+    speedToggleBtn.BackgroundColor3 = CONFIG.Accent
+    Log("SPEED RESET TO DEFAULT")
+end)
+
+
+local function HandleChat(msg)
+    msg = msg:lower():gsub("^%s+","")
+    if msg:sub(1,3)==":hl" and msg:sub(1,5)~=":hlal" then
+        local name = msg:sub(5):match("^%s*(.-)%s*$")
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(name) then
+                ApplyHighlight(p,State.HighlightColor,State.Transparency,State.FillEnabled,State.OutlineOnly); return
+            end
+        end
+        Log("NOT FOUND: "..name)
+    elseif msg==":hlall" or msg==":esp" then HighlightAll()
+    elseif msg:sub(1,5)==":unhl" then
+        local name = msg:sub(7):match("^%s*(.-)%s*$")
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(name) then RemoveHighlight(p); return end
+        end
+    elseif msg==":clearhl" then ClearAll()
+    elseif msg:sub(1,6)==":color" then
+        local name = msg:sub(8):match("^%s*(.-)%s*$")
+        for _,c in ipairs(CONFIG.HighlightColors) do
+            if c.Name:lower()==name then State.HighlightColor=c.Color; Log("COLOR: "..c.Name); return end
+        end
+        Log("UNKNOWN: "..name)
+    elseif msg:sub(1,3)==":tp" then
+        local name = msg:sub(5):match("^%s*(.-)%s*$")
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower():find(name) and p.Character then
+                local hrp  = p.Character:FindFirstChild("HumanoidRootPart")
+                local lhrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and lhrp then lhrp.CFrame = hrp.CFrame + Vector3.new(0,4,0) end
+                return
+            end
+        end
+    elseif msg==":fly" then
+        ToggleFly()
+        flyStatus.Text       = State.Flying and "STATUS: ON"  or "STATUS: OFF"
+        flyStatus.TextColor3 = State.Flying and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40)
+        flyToggleBtn.BackgroundColor3 = State.Flying and Color3.fromRGB(35,134,54) or CONFIG.Accent
+    elseif msg==":speed" then
+        State_SpeedActive = not State_SpeedActive
+        ApplySpeed()
+        speedStatus.Text       = State_SpeedActive and "STATUS: ON"  or "STATUS: OFF"
+        speedStatus.TextColor3 = State_SpeedActive and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40)
+        speedToggleBtn.BackgroundColor3 = State_SpeedActive and Color3.fromRGB(35,134,54) or CONFIG.Accent
+        Log(State_SpeedActive and "SPEED ON" or "SPEED OFF")
+    end
+end
+LocalPlayer.Chatted:Connect(HandleChat)
+
+-- ============================================================
+-- TAB: INFO
+-- ============================================================
+local TInfo = MakeTabFrame("INFO")
+
+local infoLayout = Instance.new("UIListLayout")
+infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
+infoLayout.Padding   = UDim.new(0,6)
+infoLayout.Parent    = TInfo
+
+local infoRows = {
+    {"SCRIPT",      "ZARCWARE"},
+    {"THEME",       "YELLOW/GOLD"},
+    {"FONT",        "PIXEL/ARCADE"},
+    {"TOGGLE",      "RIGHT ALT"},
+    {"PREFIX",      ":"},
+    {"FLY KEYS",    "WASD+SPACE+CTRL"},
+    {"ESP MODE",    "ALWAYS ON TOP"},
+    {"MAX SPEED",   "500 WS / 500 JP"},
+}
+for i, r in ipairs(infoRows) do
+    local row = Instance.new("Frame")
+    row.Size             = UDim2.new(1,0,0,32)
+    row.BackgroundColor3 = CONFIG.Surface
+    row.BorderSizePixel  = 0
+    row.LayoutOrder      = i
+    row.Parent           = TInfo
+    MakeCorner(row,2)
+    MakeStroke(row,CONFIG.Border,1)
+    MakePadding(row,0,12,0,12)
+    local k = Label(row,r[1],12,CONFIG.TextMuted)
+    k.Size = UDim2.new(0.5,0,1,0)
+    local v = Label(row,r[2],12,CONFIG.Accent,Enum.TextXAlignment.Right)
+    v.Size     = UDim2.new(0.5,0,1,0)
+    v.Position = UDim2.new(0.5,0,0,0)
+end
+
+-- ============================================================
+-- CONSOLE BAR
+-- ============================================================
+local ConsoleBar = Instance.new("Frame")
+ConsoleBar.Name             = "ConsoleBar"
+ConsoleBar.Size             = UDim2.new(1,0,0,58)
+ConsoleBar.Position         = UDim2.new(0,0,1,-60)
+ConsoleBar.BackgroundColor3 = CONFIG.Surface
+ConsoleBar.BorderSizePixel  = 0
+ConsoleBar.Parent           = Window
+MakeStroke(ConsoleBar,CONFIG.Border,1)
+MakePadding(ConsoleBar,4,8,4,8)
+
+local ConsoleScroll = Instance.new("ScrollingFrame")
+ConsoleScroll.Size               = UDim2.new(1,0,1,0)
+ConsoleScroll.BackgroundTransparency = 1
+ConsoleScroll.ScrollBarThickness = 0
+ConsoleScroll.CanvasSize         = UDim2.new(0,0,0,0)
+ConsoleScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ConsoleScroll.Parent             = ConsoleBar
+
+local ConsoleLayout = Instance.new("UIListLayout")
+ConsoleLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ConsoleLayout.Padding   = UDim.new(0,1)
+ConsoleLayout.Parent    = ConsoleScroll
+
+local logOrder = 0
+local rawLog   = Log
+Log = function(msg)
+    rawLog(msg)
+    logOrder = logOrder + 1
+    local line = Instance.new("TextLabel")
+    line.Size              = UDim2.new(1,0,0,12)
+    line.BackgroundTransparency = 1
+    line.Text              = string.format("> [%.1fs] %s", os.clock(), msg)
+    line.TextColor3        = Color3.fromRGB(63,185,80)
+    line.TextSize          = 11
+    line.Font              = PF
+    line.TextXAlignment    = Enum.TextXAlignment.Left
+    line.LayoutOrder       = logOrder
+    line.Parent            = ConsoleScroll
+    task.defer(function() ConsoleScroll.CanvasPosition = Vector2.new(0,math.huge) end)
+end
+
+-- ============================================================
+-- TOGGLE KEY
+-- ============================================================
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == CONFIG.ToggleKey then
+        State.Visible  = not State.Visible
+        Window.Visible = State.Visible
+    end
+end)
+
+-- ============================================================
+-- INIT
+-- ============================================================
+SetTab("PLAYERS")
+Log("ZARCWARE LOADED")
+Log("TOGGLE: RIGHT ALT | PREFIX: :")
+Log(#Players:GetPlayers() .. " PLAYER(S) IN SERVER")
