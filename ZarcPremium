@@ -119,7 +119,7 @@ local function PixelBtn(parent, text, bgColor, size, pos)
 end
 
 -- ============================================================
--- FLY SYSTEM
+-- FLY SYSTEM (stealthy: CFrame-based, no BodyMover instances)
 -- ============================================================
 local function StartFly()
     local char = LocalPlayer.Character
@@ -128,24 +128,20 @@ local function StartFly()
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return end
 
-    hum.PlatformStand = true
+    hum.PlatformStand = false
+    local stateConn = hum.StateChanged:Connect(function(_, new)
+        if State.Flying and new ~= Enum.HumanoidStateType.Running then
+            pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
+        end
+    end)
+    State.FlyStateConn = stateConn
 
-    local bv = Instance.new("BodyVelocity")
-    bv.Velocity  = Vector3.zero
-    bv.MaxForce  = Vector3.new(1e5, 1e5, 1e5)
-    bv.Parent    = hrp
-    State.FlyBodyVel = bv
+    local lastCF = hrp.CFrame
 
-    local bg = Instance.new("BodyGyro")
-    bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-    bg.D         = 100
-    bg.CFrame    = hrp.CFrame
-    bg.Parent    = hrp
-    State.FlyBodyGyro = bg
-
-    State.FlyConnection = RunService.Heartbeat:Connect(function()
+    State.FlyConnection = RunService.Heartbeat:Connect(function(dt)
         local cam = workspace.CurrentCamera
         if not cam or not hrp or not hrp.Parent then return end
+
         local dir = Vector3.zero
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector  end
         if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector  end
@@ -153,8 +149,20 @@ local function StartFly()
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.Space)       then dir = dir + Vector3.new(0,1,0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0,1,0) end
-        bv.Velocity = dir.Magnitude > 0 and dir.Unit * State.FlySpeed or Vector3.zero
-        bg.CFrame   = cam.CFrame
+
+        local targetPos = lastCF.Position + (dir.Magnitude > 0 and dir.Unit * State.FlySpeed * dt or Vector3.zero)
+        local lookDir   = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+        local newCF
+        if lookDir.Magnitude > 0.01 then
+            newCF = CFrame.new(targetPos, targetPos + lookDir)
+        else
+            newCF = CFrame.new(targetPos) * (lastCF - lastCF.Position)
+        end
+
+        hrp.CFrame = newCF
+        lastCF     = newCF
+        hrp.AssemblyLinearVelocity  = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
     end)
 
     State.Flying = true
@@ -163,12 +171,19 @@ end
 
 local function StopFly()
     if State.FlyConnection then State.FlyConnection:Disconnect(); State.FlyConnection = nil end
-    if State.FlyBodyVel    then State.FlyBodyVel:Destroy();    State.FlyBodyVel    = nil end
-    if State.FlyBodyGyro   then State.FlyBodyGyro:Destroy();   State.FlyBodyGyro   = nil end
+    if State.FlyStateConn  then State.FlyStateConn:Disconnect();  State.FlyStateConn  = nil end
     local char = LocalPlayer.Character
     if char then
         local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then hum.PlatformStand = false end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hum then
+            hum.PlatformStand = false
+            pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
+        end
+        if hrp then
+            hrp.AssemblyLinearVelocity  = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
     end
     State.Flying = false
     Log("FLY OFF")
@@ -650,9 +665,199 @@ end
 MakeToggle(THighlights,"FILL ENABLED",130,true, function(v) State.FillEnabled=v end)
 MakeToggle(THighlights,"OUTLINE ONLY",164,false,function(v) State.OutlineOnly=v  end)
 
--- ============================================================
--- TAB: FLY
--- ============================================================
+-- ---- Box ESP ----
+local State_BoxESP     = false
+local State_BoxLines   = {}
+
+local function ClearBoxes()
+    for _, lines in pairs(State_BoxLines) do
+        for _, l in ipairs(lines) do
+            pcall(function() l.Visible = false; l:Remove() end)
+        end
+    end
+    State_BoxLines = {}
+end
+
+local function DrawBox(player)
+    if not player.Character then return end
+    local root = player.Character:FindFirstChild("HumanoidRootPart")
+    local hum  = player.Character:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return end
+
+    -- 4 corner lines of a 2D box
+    local lines = {}
+    for i = 1, 4 do
+        local l = Drawing.new("Line")
+        l.Thickness = 1.5
+        l.Color     = State.HighlightColor
+        l.Visible   = false
+        l.ZIndex    = 5
+        table.insert(lines, l)
+    end
+    State_BoxLines[player] = lines
+end
+
+local function UpdateBoxes()
+    for player, lines in pairs(State_BoxLines) do
+        local char = player.Character
+        if not char then
+            for _, l in ipairs(lines) do l.Visible = false end
+            continue
+        end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum  = char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health <= 0 then
+            for _, l in ipairs(lines) do l.Visible = false end
+            continue
+        end
+
+        local cam    = workspace.CurrentCamera
+        local height = 5.5
+        local width  = 2.2
+        local cf     = root.CFrame
+
+        local corners3D = {
+            cf * Vector3.new(-width, -height/2, 0),
+            cf * Vector3.new( width, -height/2, 0),
+            cf * Vector3.new( width,  height,   0),
+            cf * Vector3.new(-width,  height,   0),
+        }
+
+        local pts2D = {}
+        local allOnScreen = true
+        for _, c3 in ipairs(corners3D) do
+            local v, onScreen = cam:WorldToViewportPoint(c3)
+            if not onScreen then allOnScreen = false end
+            table.insert(pts2D, Vector2.new(v.X, v.Y))
+        end
+
+        if allOnScreen then
+            lines[1].From = pts2D[1]; lines[1].To = pts2D[2]; lines[1].Visible = true
+            lines[2].From = pts2D[2]; lines[2].To = pts2D[3]; lines[2].Visible = true
+            lines[3].From = pts2D[3]; lines[3].To = pts2D[4]; lines[3].Visible = true
+            lines[4].From = pts2D[4]; lines[4].To = pts2D[1]; lines[4].Visible = true
+            for _, l in ipairs(lines) do l.Color = State.HighlightColor end
+        else
+            for _, l in ipairs(lines) do l.Visible = false end
+        end
+    end
+end
+
+local State_BoxConn = nil
+
+local function EnableBoxESP()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then DrawBox(p) end
+    end
+    State_BoxConn = RunService.RenderStepped:Connect(UpdateBoxes)
+    Log("BOX ESP ON")
+end
+
+local function DisableBoxESP()
+    if State_BoxConn then State_BoxConn:Disconnect(); State_BoxConn = nil end
+    ClearBoxes()
+    Log("BOX ESP OFF")
+end
+
+Players.PlayerAdded:Connect(function(p)
+    if State_BoxESP then
+        p.CharacterAdded:Connect(function()
+            task.wait(0.5)
+            if State_BoxESP then DrawBox(p) end
+        end)
+    end
+end)
+Players.PlayerRemoving:Connect(function(p)
+    if State_BoxLines[p] then
+        for _, l in ipairs(State_BoxLines[p]) do
+            pcall(function() l.Visible=false; l:Remove() end)
+        end
+        State_BoxLines[p] = nil
+    end
+end)
+
+MakeToggle(THighlights,"BOX ESP",198,false,function(v)
+    State_BoxESP = v
+    if v then EnableBoxESP() else DisableBoxESP() end
+end)
+
+-- ---- Tracers ----
+local State_Tracers    = false
+local State_TracerLines = {}
+local State_TracerConn = nil
+
+local function ClearTracers()
+    for _, l in pairs(State_TracerLines) do
+        pcall(function() l.Visible=false; l:Remove() end)
+    end
+    State_TracerLines = {}
+end
+
+local function UpdateTracers()
+    local cam      = workspace.CurrentCamera
+    local viewport = cam.ViewportSize
+    local origin   = Vector2.new(viewport.X / 2, viewport.Y) -- bottom center
+
+    for player, line in pairs(State_TracerLines) do
+        local char = player.Character
+        if not char then line.Visible = false; continue end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum  = char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health <= 0 then line.Visible = false; continue end
+
+        local vec, onScreen = cam:WorldToViewportPoint(root.Position)
+        if onScreen then
+            line.From    = origin
+            line.To      = Vector2.new(vec.X, vec.Y)
+            line.Color   = State.HighlightColor
+            line.Visible = true
+        else
+            line.Visible = false
+        end
+    end
+end
+
+local function EnableTracers()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local l = Drawing.new("Line")
+            l.Thickness = 1
+            l.Color     = State.HighlightColor
+            l.Visible   = false
+            l.ZIndex    = 4
+            State_TracerLines[p] = l
+        end
+    end
+    State_TracerConn = RunService.RenderStepped:Connect(UpdateTracers)
+    Log("TRACERS ON")
+end
+
+local function DisableTracers()
+    if State_TracerConn then State_TracerConn:Disconnect(); State_TracerConn = nil end
+    ClearTracers()
+    Log("TRACERS OFF")
+end
+
+Players.PlayerAdded:Connect(function(p)
+    if State_Tracers then
+        local l = Drawing.new("Line")
+        l.Thickness = 1; l.Color = State.HighlightColor; l.Visible = false; l.ZIndex = 4
+        State_TracerLines[p] = l
+    end
+end)
+Players.PlayerRemoving:Connect(function(p)
+    if State_TracerLines[p] then
+        pcall(function() State_TracerLines[p].Visible=false; State_TracerLines[p]:Remove() end)
+        State_TracerLines[p] = nil
+    end
+end)
+
+MakeToggle(THighlights,"TRACERS",232,false,function(v)
+    State_Tracers = v
+    if v then EnableTracers() else DisableTracers() end
+end)
+
+
 local TFly = MakeTabFrame("FLY")
 
 local flyTitle = Label(TFly,"FLY MODE",18,CONFIG.Accent,Enum.TextXAlignment.Center)
@@ -754,9 +959,57 @@ local function ApplySpeed()
     local char = LocalPlayer.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.WalkSpeed = State_SpeedActive and State_WalkSpeed or 16
-        hum.JumpPower = State_SpeedActive and State_JumpPower or 50
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then return end
+
+    if State_SpeedActive then
+        -- Keep WalkSpeed at 16 so server-side property checks pass
+        -- Use a BodyVelocity to actually move faster, hidden in HRP
+        hum.WalkSpeed = 16
+        hum.JumpPower = State_JumpPower
+
+        -- Remove existing speed BV if any
+        local existing = hrp:FindFirstChild("_ZarcSpeed")
+        if existing then existing:Destroy() end
+
+        local bv = Instance.new("BodyVelocity")
+        bv.Name     = "_ZarcSpeed"
+        bv.MaxForce = Vector3.new(1e4, 0, 1e4)  -- no Y force so gravity still applies
+        bv.Velocity = Vector3.zero
+        bv.Parent   = hrp
+
+        -- Drive the BodyVelocity using the humanoid move direction
+        if State.SpeedConn then State.SpeedConn:Disconnect() end
+        State.SpeedConn = RunService.Heartbeat:Connect(function()
+            if not State_SpeedActive then return end
+            local c2 = LocalPlayer.Character
+            if not c2 then return end
+            local h2   = c2:FindFirstChildOfClass("Humanoid")
+            local r2   = c2:FindFirstChild("HumanoidRootPart")
+            local bv2  = r2 and r2:FindFirstChild("_ZarcSpeed")
+            if not h2 or not r2 or not bv2 then return end
+
+            local md = h2.MoveDirection
+            if md.Magnitude > 0 then
+                -- Scale up the natural move direction by desired speed
+                bv2.Velocity = md * (State_WalkSpeed - 16)
+            else
+                bv2.Velocity = Vector3.zero
+            end
+            -- Continuously reset WalkSpeed in case server resets it
+            h2.WalkSpeed = 16
+        end)
+    else
+        -- Clean up
+        if State.SpeedConn then State.SpeedConn:Disconnect(); State.SpeedConn = nil end
+        if hrp then
+            local existing = hrp:FindFirstChild("_ZarcSpeed")
+            if existing then existing:Destroy() end
+        end
+        if hum then
+            hum.WalkSpeed = 16
+            hum.JumpPower = 50
+        end
     end
 end
 
@@ -976,7 +1229,7 @@ local function LoadAimbot()
         TeamCheck            = false,
         AliveCheck           = true,
         WallCheck            = false,
-        Sensitivity          = 0,
+        Sensitivity          = 0.15,
         ThirdPerson          = false,
         ThirdPersonSensitivity = 3,
         TriggerKey           = "MouseButton2",
@@ -1205,6 +1458,59 @@ UserInputService.InputChanged:Connect(function(i)
     end
 end)
 
+-- Smoothness slider (controls Sensitivity: 0 = instant snap, 1 = very slow/smooth)
+local smoothLbl = Label(TAimbot,"SMOOTHNESS:",12,CONFIG.TextMuted)
+smoothLbl.Size     = UDim2.new(1,0,0,14)
+smoothLbl.Position = UDim2.new(0,0,0,152)
+
+local SmTrack = Instance.new("Frame")
+SmTrack.Size             = UDim2.new(1,0,0,6)
+SmTrack.Position         = UDim2.new(0,0,0,172)
+SmTrack.BackgroundColor3 = CONFIG.Border
+SmTrack.BorderSizePixel  = 0
+SmTrack.Parent           = TAimbot
+MakeCorner(SmTrack,2)
+
+-- default smoothness = 0.15 (feels natural, not instant)
+local defaultSmooth   = 0.15
+local defaultSmRel    = defaultSmooth / 1.0
+
+local SmFill = Instance.new("Frame")
+SmFill.Size              = UDim2.new(defaultSmRel,0,1,0)
+SmFill.BackgroundColor3  = CONFIG.Accent
+SmFill.BorderSizePixel   = 0
+SmFill.Parent            = SmTrack
+MakeCorner(SmFill,2)
+
+local SmHandle = Instance.new("TextButton")
+SmHandle.Size            = UDim2.new(0,16,0,16)
+SmHandle.Position        = UDim2.new(defaultSmRel,-8,0.5,-8)
+SmHandle.BackgroundColor3 = Color3.new(1,1,1)
+SmHandle.Text            = ""
+SmHandle.BorderSizePixel = 0
+SmHandle.Parent          = SmTrack
+MakeCorner(SmHandle,2)
+
+local smValLbl = Label(TAimbot,"SMOOTH: 0.15  (0=SNAP  1=SLOW)",11,CONFIG.TextPrimary)
+smValLbl.Size     = UDim2.new(1,0,0,14)
+smValLbl.Position = UDim2.new(0,0,0,186)
+
+local smDrag = false
+SmHandle.MouseButton1Down:Connect(function() smDrag=true end)
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then smDrag=false end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if smDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
+        local rel  = math.clamp((i.Position.X-SmTrack.AbsolutePosition.X)/SmTrack.AbsoluteSize.X,0,1)
+        local sens = math.floor(rel*100)/100  -- 0.00 – 1.00
+        if AimbotEnv.Settings then AimbotEnv.Settings.Sensitivity = sens end
+        SmFill.Size       = UDim2.new(rel,0,1,0)
+        SmHandle.Position = UDim2.new(rel,-8,0.5,-8)
+        smValLbl.Text     = "SMOOTH: "..string.format("%.2f", sens).."  (0=SNAP  1=SLOW)"
+    end
+end)
+
 -- Toggles row
 local function AimbotToggleRow(parent, labelText, yPos, default, callback)
     local container = Instance.new("Frame")
@@ -1234,14 +1540,14 @@ local function AimbotToggleRow(parent, labelText, yPos, default, callback)
     end)
 end
 
-AimbotToggleRow(TAimbot,"TEAM CHECK",  162, false, function(v) if AimbotEnv.Settings then AimbotEnv.Settings.TeamCheck  = v end end)
-AimbotToggleRow(TAimbot,"ALIVE CHECK", 192, true,  function(v) if AimbotEnv.Settings then AimbotEnv.Settings.AliveCheck = v end end)
-AimbotToggleRow(TAimbot,"TOGGLE MODE", 222, false, function(v) if AimbotEnv.Settings then AimbotEnv.Settings.Toggle     = v end end)
-AimbotToggleRow(TAimbot,"FOV VISIBLE", 252, true,  function(v) if AimbotEnv.FOVSettings then AimbotEnv.FOVSettings.Visible = v end end)
+AimbotToggleRow(TAimbot,"TEAM CHECK",  210, false, function(v) if AimbotEnv.Settings then AimbotEnv.Settings.TeamCheck  = v end end)
+AimbotToggleRow(TAimbot,"ALIVE CHECK", 240, true,  function(v) if AimbotEnv.Settings then AimbotEnv.Settings.AliveCheck = v end end)
+AimbotToggleRow(TAimbot,"TOGGLE MODE", 270, false, function(v) if AimbotEnv.Settings then AimbotEnv.Settings.Toggle     = v end end)
+AimbotToggleRow(TAimbot,"FOV VISIBLE", 300, true,  function(v) if AimbotEnv.FOVSettings then AimbotEnv.FOVSettings.Visible = v end end)
 
 local aimbotHint = Label(TAimbot,"HOLD RMB TO LOCK ON TARGET",11,CONFIG.TextMuted,Enum.TextXAlignment.Center)
 aimbotHint.Size     = UDim2.new(1,0,0,14)
-aimbotHint.Position = UDim2.new(0,0,0,286)
+aimbotHint.Position = UDim2.new(0,0,0,334)
 
 -- ============================================================
 -- TAB: INFO
