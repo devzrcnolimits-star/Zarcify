@@ -1,5 +1,5 @@
 -- ZarcWare | Loadstring compatible
--- Usage: loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/ZarcPremium"))()
+-- Usage: loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/Zarc"))()
 
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
@@ -19,7 +19,7 @@ local CONFIG = {
     TextPrimary = Color3.fromRGB(255, 240, 200),
     TextMuted   = Color3.fromRGB(150, 135, 90),
     PixelFont   = Enum.Font.Arcade,
-    ToggleKey   = Enum.KeyCode.RightAlt,
+    ToggleKey   = Enum.KeyCode.RightShift,
 
     HighlightColors = {
         { Name = "Green",  Color = Color3.fromRGB(88,  214, 141) },
@@ -264,8 +264,9 @@ end
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name           = "ZarcWare"
 ScreenGui.ResetOnSpawn   = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder   = 999
 ScreenGui.Parent         = LocalPlayer:WaitForChild("PlayerGui")
 
 local Window = Instance.new("Frame")
@@ -382,7 +383,7 @@ TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.SortOrder     = Enum.SortOrder.LayoutOrder
 TabLayout.Parent        = TabBar
 
-local TabNames = {"PLAYERS","HIGHLIGHTS","FLY","SPEED","AIMBOT","INFO"}
+local TabNames = {"PLAYERS","HIGHLIGHTS","CHARACTER","AIMBOT"}
 
 local function SetTab(name)
     for _, t in pairs(TabStates) do
@@ -858,300 +859,243 @@ MakeToggle(THighlights,"TRACERS",232,false,function(v)
 end)
 
 
-local TFly = MakeTabFrame("FLY")
-
-local flyTitle = Label(TFly,"FLY MODE",18,CONFIG.Accent,Enum.TextXAlignment.Center)
-flyTitle.Size     = UDim2.new(1,0,0,24)
-flyTitle.Position = UDim2.new(0,0,0,0)
-
-local flyStatus = Label(TFly,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
-flyStatus.Size     = UDim2.new(1,0,0,18)
-flyStatus.Position = UDim2.new(0,0,0,30)
-
-local flyToggleBtn = PixelBtn(TFly,"[ TOGGLE FLY ]",CONFIG.Accent,UDim2.new(0.6,0,0,38),UDim2.new(0.2,0,0,58))
-flyToggleBtn.TextColor3 = CONFIG.Background
-
-local spLbl = Label(TFly,"FLY SPEED:",12,CONFIG.TextMuted)
-spLbl.Size     = UDim2.new(1,0,0,16)
-spLbl.Position = UDim2.new(0,0,0,112)
-
-local SpTrack = Instance.new("Frame")
-SpTrack.Size             = UDim2.new(1,0,0,6)
-SpTrack.Position         = UDim2.new(0,0,0,136)
-SpTrack.BackgroundColor3 = CONFIG.Border
-SpTrack.BorderSizePixel  = 0
-SpTrack.Parent           = TFly
-MakeCorner(SpTrack,2)
-
-local SpFill = Instance.new("Frame")
-SpFill.Size              = UDim2.new(0.3,0,1,0)
-SpFill.BackgroundColor3  = CONFIG.Accent
-SpFill.BorderSizePixel   = 0
-SpFill.Parent            = SpTrack
-MakeCorner(SpFill,2)
-
-local SpHandle = Instance.new("TextButton")
-SpHandle.Size            = UDim2.new(0,16,0,16)
-SpHandle.Position        = UDim2.new(0.3,-8,0.5,-8)
-SpHandle.BackgroundColor3 = Color3.new(1,1,1)
-SpHandle.Text            = ""
-SpHandle.BorderSizePixel = 0
-SpHandle.Parent          = SpTrack
-MakeCorner(SpHandle,2)
-
-local spValLbl = Label(TFly,"SPEED: 60",12,CONFIG.TextPrimary)
-spValLbl.Size     = UDim2.new(1,0,0,14)
-spValLbl.Position = UDim2.new(0,0,0,150)
-
-local spDrag = false
-SpHandle.MouseButton1Down:Connect(function() spDrag=true end)
-UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 then spDrag=false end
-end)
-UserInputService.InputChanged:Connect(function(i)
-    if spDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
-        local rel = math.clamp((i.Position.X-SpTrack.AbsolutePosition.X)/SpTrack.AbsoluteSize.X,0,1)
-        State.FlySpeed     = math.floor(rel*190+10)
-        SpFill.Size        = UDim2.new(rel,0,1,0)
-        SpHandle.Position  = UDim2.new(rel,-8,0.5,-8)
-        spValLbl.Text      = "SPEED: "..tostring(State.FlySpeed)
-    end
-end)
-
-local flyKeysLbl = Label(TFly,"WASD=MOVE | SPACE=UP | CTRL=DOWN",11,CONFIG.TextMuted,Enum.TextXAlignment.Center)
-flyKeysLbl.Size     = UDim2.new(1,0,0,14)
-flyKeysLbl.Position = UDim2.new(0,0,0,172)
-
-flyToggleBtn.MouseButton1Click:Connect(function()
-    ToggleFly()
-    if State.Flying then
-        flyStatus.Text       = "STATUS: ON"
-        flyStatus.TextColor3 = Color3.fromRGB(88,214,141)
-        flyToggleBtn.BackgroundColor3 = Color3.fromRGB(35,134,54)
-    else
-        flyStatus.Text       = "STATUS: OFF"
-        flyStatus.TextColor3 = Color3.fromRGB(180,40,40)
-        flyToggleBtn.BackgroundColor3 = CONFIG.Accent
-    end
-end)
-
 -- ============================================================
--- TAB: SPEED
+-- TAB: CHARACTER (Fly, Noclip, Speed, JumpPower, Gravity, Extras)
 -- ============================================================
-local TSpeed = MakeTabFrame("SPEED")
+local TChar = MakeTabFrame("CHARACTER")
 
+local CharScroll = Instance.new("ScrollingFrame")
+CharScroll.Size               = UDim2.new(1,0,1,0)
+CharScroll.BackgroundTransparency = 1
+CharScroll.ScrollBarThickness = 3
+CharScroll.CanvasSize         = UDim2.new(0,0,0,0)
+CharScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+CharScroll.Parent             = TChar
+
+local CharLayout = Instance.new("UIListLayout")
+CharLayout.SortOrder = Enum.SortOrder.LayoutOrder
+CharLayout.Padding   = UDim.new(0,6)
+CharLayout.Parent    = CharScroll
+MakePadding(CharScroll,4,4,8,4)
+
+local charOrder = 0
+
+local function CharSection(title)
+    charOrder += 1
+    local lbl = Instance.new("TextLabel")
+    lbl.Size             = UDim2.new(1,0,0,14)
+    lbl.BackgroundTransparency = 1
+    lbl.Text             = "-- "..title.." --"
+    lbl.TextColor3       = CONFIG.Accent
+    lbl.TextSize         = 11
+    lbl.Font             = PF
+    lbl.TextXAlignment   = Enum.TextXAlignment.Left
+    lbl.LayoutOrder      = charOrder
+    lbl.Parent           = CharScroll
+end
+
+local function CharSlider(labelText, minVal, maxVal, defaultVal, decimals, onChanged)
+    charOrder += 1
+    local container = Instance.new("Frame")
+    container.Size             = UDim2.new(1,0,0,42)
+    container.BackgroundColor3 = CONFIG.Surface
+    container.BorderSizePixel  = 0
+    container.LayoutOrder      = charOrder
+    container.Parent           = CharScroll
+    MakeCorner(container,2)
+    MakeStroke(container,CONFIG.Border,1)
+    MakePadding(container,6,10,6,10)
+
+    local fmt = decimals > 0 and ("%."..decimals.."f") or "%d"
+
+    local lbl = Label(container, labelText, 11, CONFIG.TextMuted)
+    lbl.Size = UDim2.new(0.6,0,0,14); lbl.Position = UDim2.new(0,0,0,0)
+
+    local valLbl = Label(container, string.format(fmt,defaultVal), 11, CONFIG.TextPrimary, Enum.TextXAlignment.Right)
+    valLbl.Size = UDim2.new(0.4,0,0,14); valLbl.Position = UDim2.new(0.6,0,0,0)
+
+    local track = Instance.new("Frame")
+    track.Size             = UDim2.new(1,0,0,5)
+    track.Position         = UDim2.new(0,0,1,-12)
+    track.BackgroundColor3 = CONFIG.Border
+    track.BorderSizePixel  = 0
+    track.Parent           = container
+    MakeCorner(track,2)
+
+    local rel0 = (defaultVal-minVal)/(maxVal-minVal)
+
+    local fill = Instance.new("Frame")
+    fill.Size             = UDim2.new(rel0,0,1,0)
+    fill.BackgroundColor3 = CONFIG.Accent
+    fill.BorderSizePixel  = 0
+    fill.Parent           = track
+    MakeCorner(fill,2)
+
+    local handle = Instance.new("TextButton")
+    handle.Size            = UDim2.new(0,14,0,14)
+    handle.Position        = UDim2.new(rel0,-7,0.5,-7)
+    handle.BackgroundColor3 = Color3.new(1,1,1)
+    handle.Text            = ""
+    handle.BorderSizePixel = 0
+    handle.Parent          = track
+    MakeCorner(handle,2)
+
+    local dragging = false
+    handle.MouseButton1Down:Connect(function() dragging=true end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then
+            local rel = math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+            local val = decimals>0 and (math.floor((minVal+rel*(maxVal-minVal))*(10^decimals))/(10^decimals)) or math.floor(minVal+rel*(maxVal-minVal))
+            fill.Size       = UDim2.new(rel,0,1,0)
+            handle.Position = UDim2.new(rel,-7,0.5,-7)
+            valLbl.Text     = string.format(fmt,val)
+            onChanged(val)
+        end
+    end)
+end
+
+local function CharToggle(labelText, default, callback)
+    charOrder += 1
+    local container = Instance.new("Frame")
+    container.Size             = UDim2.new(1,0,0,34)
+    container.BackgroundColor3 = CONFIG.Surface
+    container.BorderSizePixel  = 0
+    container.LayoutOrder      = charOrder
+    container.Parent           = CharScroll
+    MakeCorner(container,2)
+    MakeStroke(container,CONFIG.Border,1)
+    MakePadding(container,0,10,0,10)
+
+    local lbl = Label(container, labelText, 12, CONFIG.TextPrimary)
+    lbl.Size = UDim2.new(0.65,0,1,0)
+
+    local statusLbl = Label(container, default and "ON" or "OFF", 11,
+        default and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40), Enum.TextXAlignment.Right)
+    statusLbl.Size = UDim2.new(0.2,0,1,0); statusLbl.Position = UDim2.new(0.65,0,0,0)
+
+    local btn = Instance.new("TextButton")
+    btn.Size             = UDim2.new(0,38,0,20)
+    btn.Position         = UDim2.new(1,-38,0.5,-10)
+    btn.BackgroundColor3 = default and Color3.fromRGB(35,134,54) or CONFIG.Border
+    btn.Text             = "[ ]"
+    btn.TextSize         = 10; btn.Font = PF
+    btn.TextColor3       = Color3.new(1,1,1)
+    btn.BorderSizePixel  = 0
+    btn.Parent           = container
+    MakeCorner(btn,2)
+
+    local on = default
+    btn.MouseButton1Click:Connect(function()
+        on = not on
+        Tween(btn,TweenInfo.new(0.12),{BackgroundColor3=on and Color3.fromRGB(35,134,54) or CONFIG.Border})
+        statusLbl.Text       = on and "ON" or "OFF"
+        statusLbl.TextColor3 = on and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40)
+        callback(on)
+    end)
+end
+
+-- ===== FLY =====
+CharSection("FLY")
+CharToggle("FLY MODE", false, function(v)
+    if v then StartFly() else StopFly() end
+end)
+CharSlider("FLY SPEED", 10, 200, 60, 0, function(v) State.FlySpeed = v end)
+
+-- ===== NOCLIP =====
+CharSection("NOCLIP")
+local State_Noclip    = false
+local State_NoclipConn = nil
+
+local function StartNoclip()
+    State_NoclipConn = RunService.Stepped:Connect(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        for _, p in ipairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+    end)
+    State_Noclip = true; Log("NOCLIP ON")
+end
+
+local function StopNoclip()
+    if State_NoclipConn then State_NoclipConn:Disconnect(); State_NoclipConn = nil end
+    local char = LocalPlayer.Character
+    if char then
+        for _, p in ipairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = true end
+        end
+    end
+    State_Noclip = false; Log("NOCLIP OFF")
+end
+
+CharToggle("NOCLIP", false, function(v) if v then StartNoclip() else StopNoclip() end end)
+
+-- ===== SPEED =====
+CharSection("SPEED")
 local State_WalkSpeed   = 16
 local State_JumpPower   = 50
 local State_SpeedActive = false
 
-local speedTitle = Label(TSpeed,"SPEED HACK",18,CONFIG.Accent,Enum.TextXAlignment.Center)
-speedTitle.Size     = UDim2.new(1,0,0,24)
-speedTitle.Position = UDim2.new(0,0,0,0)
+CharToggle("SPEED HACK", false, function(v)
+    State_SpeedActive = v; ApplySpeed()
+    Log(v and ("SPEED ON | WS:"..State_WalkSpeed) or "SPEED OFF")
+end)
+CharSlider("WALKSPEED", 16, 500, 16, 0, function(v)
+    State_WalkSpeed = v; if State_SpeedActive then ApplySpeed() end
+end)
 
-local speedStatus = Label(TSpeed,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
-speedStatus.Size     = UDim2.new(1,0,0,18)
-speedStatus.Position = UDim2.new(0,0,0,28)
+-- ===== JUMP =====
+CharSection("JUMP")
+CharSlider("JUMP POWER", 50, 500, 50, 0, function(v)
+    State_JumpPower = v; if State_SpeedActive then ApplySpeed() end
+end)
 
-local speedToggleBtn = PixelBtn(TSpeed,"[ TOGGLE SPEED ]",CONFIG.Accent,UDim2.new(0.6,0,0,36),UDim2.new(0.2,0,0,52))
-speedToggleBtn.TextColor3 = CONFIG.Background
+-- ===== GRAVITY =====
+CharSection("GRAVITY")
+local State_GravityActive = false
+local defaultGravity      = workspace.Gravity
 
-local function ApplySpeed()
+CharToggle("CUSTOM GRAVITY", false, function(v)
+    State_GravityActive = v
+    if not v then workspace.Gravity = defaultGravity; Log("GRAVITY RESET") end
+end)
+CharSlider("GRAVITY VALUE", 0, 196, 196, 0, function(v)
+    if State_GravityActive then workspace.Gravity = v end
+end)
+
+-- ===== EXTRAS =====
+CharSection("EXTRAS")
+
+local State_InfJump = false
+UserInputService.JumpRequest:Connect(function()
+    if State_InfJump then
+        local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+CharToggle("INFINITE JUMP", false, function(v)
+    State_InfJump = v; Log(v and "INF JUMP ON" or "INF JUMP OFF")
+end)
+
+CharToggle("GHOST MODE", false, function(v)
     local char = LocalPlayer.Character
     if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hum or not hrp then return end
-
-    if State_SpeedActive then
-        -- Keep WalkSpeed at 16 so server-side property checks pass
-        -- Use a BodyVelocity to actually move faster, hidden in HRP
-        hum.WalkSpeed = 16
-        hum.JumpPower = State_JumpPower
-
-        -- Remove existing speed BV if any
-        local existing = hrp:FindFirstChild("_ZarcSpeed")
-        if existing then existing:Destroy() end
-
-        local bv = Instance.new("BodyVelocity")
-        bv.Name     = "_ZarcSpeed"
-        bv.MaxForce = Vector3.new(1e4, 0, 1e4)  -- no Y force so gravity still applies
-        bv.Velocity = Vector3.zero
-        bv.Parent   = hrp
-
-        -- Drive the BodyVelocity using the humanoid move direction
-        if State.SpeedConn then State.SpeedConn:Disconnect() end
-        State.SpeedConn = RunService.Heartbeat:Connect(function()
-            if not State_SpeedActive then return end
-            local c2 = LocalPlayer.Character
-            if not c2 then return end
-            local h2   = c2:FindFirstChildOfClass("Humanoid")
-            local r2   = c2:FindFirstChild("HumanoidRootPart")
-            local bv2  = r2 and r2:FindFirstChild("_ZarcSpeed")
-            if not h2 or not r2 or not bv2 then return end
-
-            local md = h2.MoveDirection
-            if md.Magnitude > 0 then
-                -- Scale up the natural move direction by desired speed
-                bv2.Velocity = md * (State_WalkSpeed - 16)
-            else
-                bv2.Velocity = Vector3.zero
-            end
-            -- Continuously reset WalkSpeed in case server resets it
-            h2.WalkSpeed = 16
-        end)
-    else
-        -- Clean up
-        if State.SpeedConn then State.SpeedConn:Disconnect(); State.SpeedConn = nil end
-        if hrp then
-            local existing = hrp:FindFirstChild("_ZarcSpeed")
-            if existing then existing:Destroy() end
-        end
-        if hum then
-            hum.WalkSpeed = 16
-            hum.JumpPower = 50
-        end
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then p.LocalTransparencyModifier = v and 0.6 or 0 end
     end
-end
+    Log(v and "GHOST ON" or "GHOST OFF")
+end)
 
--- re-apply on respawn
+-- Re-apply on respawn
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
     if State_SpeedActive then ApplySpeed() end
+    if State_Noclip      then StartNoclip() end
 end)
-
-speedToggleBtn.MouseButton1Click:Connect(function()
-    State_SpeedActive = not State_SpeedActive
-    ApplySpeed()
-    if State_SpeedActive then
-        speedStatus.Text       = "STATUS: ON"
-        speedStatus.TextColor3 = Color3.fromRGB(88,214,141)
-        speedToggleBtn.BackgroundColor3 = Color3.fromRGB(35,134,54)
-        Log("SPEED ON | WS:"..State_WalkSpeed.." JP:"..State_JumpPower)
-    else
-        speedStatus.Text       = "STATUS: OFF"
-        speedStatus.TextColor3 = Color3.fromRGB(180,40,40)
-        speedToggleBtn.BackgroundColor3 = CONFIG.Accent
-        Log("SPEED OFF")
-    end
-end)
-
--- WalkSpeed slider
-local wsLbl = Label(TSpeed,"WALKSPEED:",12,CONFIG.TextMuted)
-wsLbl.Size     = UDim2.new(1,0,0,14)
-wsLbl.Position = UDim2.new(0,0,0,100)
-
-local WSTrack = Instance.new("Frame")
-WSTrack.Size             = UDim2.new(1,0,0,6)
-WSTrack.Position         = UDim2.new(0,0,0,120)
-WSTrack.BackgroundColor3 = CONFIG.Border
-WSTrack.BorderSizePixel  = 0
-WSTrack.Parent           = TSpeed
-MakeCorner(WSTrack,2)
-
-local WSFill = Instance.new("Frame")
-WSFill.Size              = UDim2.new((16-16)/(500-16),0,1,0)
-WSFill.BackgroundColor3  = CONFIG.Accent
-WSFill.BorderSizePixel   = 0
-WSFill.Parent            = WSTrack
-MakeCorner(WSFill,2)
-
-local WSHandle = Instance.new("TextButton")
-WSHandle.Size            = UDim2.new(0,16,0,16)
-WSHandle.Position        = UDim2.new(0,-8,0.5,-8)
-WSHandle.BackgroundColor3 = Color3.new(1,1,1)
-WSHandle.Text            = ""
-WSHandle.BorderSizePixel = 0
-WSHandle.Parent          = WSTrack
-MakeCorner(WSHandle,2)
-
-local wsValLbl = Label(TSpeed,"WS: 16",12,CONFIG.TextPrimary)
-wsValLbl.Size     = UDim2.new(1,0,0,14)
-wsValLbl.Position = UDim2.new(0,0,0,134)
-
-local wsDrag = false
-WSHandle.MouseButton1Down:Connect(function() wsDrag=true end)
-UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 then wsDrag=false end
-end)
-UserInputService.InputChanged:Connect(function(i)
-    if wsDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
-        local rel = math.clamp((i.Position.X-WSTrack.AbsolutePosition.X)/WSTrack.AbsoluteSize.X,0,1)
-        State_WalkSpeed     = math.floor(rel*484+16)
-        WSFill.Size         = UDim2.new(rel,0,1,0)
-        WSHandle.Position   = UDim2.new(rel,-8,0.5,-8)
-        wsValLbl.Text       = "WS: "..tostring(State_WalkSpeed)
-        if State_SpeedActive then ApplySpeed() end
-    end
-end)
-
--- JumpPower slider
-local jpLbl = Label(TSpeed,"JUMPPOWER:",12,CONFIG.TextMuted)
-jpLbl.Size     = UDim2.new(1,0,0,14)
-jpLbl.Position = UDim2.new(0,0,0,160)
-
-local JPTrack = Instance.new("Frame")
-JPTrack.Size             = UDim2.new(1,0,0,6)
-JPTrack.Position         = UDim2.new(0,0,0,180)
-JPTrack.BackgroundColor3 = CONFIG.Border
-JPTrack.BorderSizePixel  = 0
-JPTrack.Parent           = TSpeed
-MakeCorner(JPTrack,2)
-
-local JPFill = Instance.new("Frame")
-JPFill.Size              = UDim2.new(0.1,0,1,0)
-JPFill.BackgroundColor3  = CONFIG.Accent
-JPFill.BorderSizePixel   = 0
-JPFill.Parent            = JPTrack
-MakeCorner(JPFill,2)
-
-local JPHandle = Instance.new("TextButton")
-JPHandle.Size            = UDim2.new(0,16,0,16)
-JPHandle.Position        = UDim2.new(0.1,-8,0.5,-8)
-JPHandle.BackgroundColor3 = Color3.new(1,1,1)
-JPHandle.Text            = ""
-JPHandle.BorderSizePixel = 0
-JPHandle.Parent          = JPTrack
-MakeCorner(JPHandle,2)
-
-local jpValLbl = Label(TSpeed,"JP: 50",12,CONFIG.TextPrimary)
-jpValLbl.Size     = UDim2.new(1,0,0,14)
-jpValLbl.Position = UDim2.new(0,0,0,194)
-
-local jpDrag = false
-JPHandle.MouseButton1Down:Connect(function() jpDrag=true end)
-UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 then jpDrag=false end
-end)
-UserInputService.InputChanged:Connect(function(i)
-    if jpDrag and i.UserInputType==Enum.UserInputType.MouseMovement then
-        local rel = math.clamp((i.Position.X-JPTrack.AbsolutePosition.X)/JPTrack.AbsoluteSize.X,0,1)
-        State_JumpPower     = math.floor(rel*450+50)
-        JPFill.Size         = UDim2.new(rel,0,1,0)
-        JPHandle.Position   = UDim2.new(rel,-8,0.5,-8)
-        jpValLbl.Text       = "JP: "..tostring(State_JumpPower)
-        if State_SpeedActive then ApplySpeed() end
-    end
-end)
-
--- Reset button
-local resetSpeedBtn = PixelBtn(TSpeed,"[ RESET DEFAULTS ]",Color3.fromRGB(60,50,20),UDim2.new(0.6,0,0,30),UDim2.new(0.2,0,0,220))
-resetSpeedBtn.MouseButton1Click:Connect(function()
-    State_WalkSpeed = 16; State_JumpPower = 50; State_SpeedActive = false
-    ApplySpeed()
-    local wsRel = 0
-    WSFill.Size       = UDim2.new(wsRel,0,1,0)
-    WSHandle.Position = UDim2.new(wsRel,-8,0.5,-8)
-    wsValLbl.Text     = "WS: 16"
-    local jpRel = 0
-    JPFill.Size       = UDim2.new(jpRel,0,1,0)
-    JPHandle.Position = UDim2.new(jpRel,-8,0.5,-8)
-    jpValLbl.Text     = "JP: 50"
-    speedStatus.Text       = "STATUS: OFF"
-    speedStatus.TextColor3 = Color3.fromRGB(180,40,40)
-    speedToggleBtn.BackgroundColor3 = CONFIG.Accent
-    Log("SPEED RESET TO DEFAULT")
-end)
-
 
 local function HandleChat(msg)
     msg = msg:lower():gsub("^%s+","")
@@ -1549,46 +1493,103 @@ local aimbotHint = Label(TAimbot,"HOLD RMB TO LOCK ON TARGET",11,CONFIG.TextMute
 aimbotHint.Size     = UDim2.new(1,0,0,14)
 aimbotHint.Position = UDim2.new(0,0,0,334)
 
--- ============================================================
--- TAB: INFO
--- ============================================================
-local TInfo = MakeTabFrame("INFO")
+-- ---- Silent Aim ----
+-- Hooks the __namecall metamethod to intercept :FindPartOnRayWithWhitelist
+-- and redirect the ray origin/direction toward the locked target's head,
+-- making bullets hit without moving the camera at all.
 
-local infoLayout = Instance.new("UIListLayout")
-infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
-infoLayout.Padding   = UDim.new(0,6)
-infoLayout.Parent    = TInfo
+local State_SilentAim    = false
+local SilentAimOriginal  = nil
+local SilentAimHooked    = false
 
-local infoRows = {
-    {"SCRIPT",      "ZARCWARE"},
-    {"THEME",       "YELLOW/GOLD"},
-    {"FONT",        "PIXEL/ARCADE"},
-    {"TOGGLE",      "RIGHT ALT"},
-    {"PREFIX",      ":"},
-    {"FLY KEYS",    "WASD+SPACE+CTRL"},
-    {"ESP MODE",    "ALWAYS ON TOP"},
-    {"MAX SPEED",   "500 WS / 500 JP"},
-}
-for i, r in ipairs(infoRows) do
-    local row = Instance.new("Frame")
-    row.Size             = UDim2.new(1,0,0,32)
-    row.BackgroundColor3 = CONFIG.Surface
-    row.BorderSizePixel  = 0
-    row.LayoutOrder      = i
-    row.Parent           = TInfo
-    MakeCorner(row,2)
-    MakeStroke(row,CONFIG.Border,1)
-    MakePadding(row,0,12,0,12)
-    local k = Label(row,r[1],12,CONFIG.TextMuted)
-    k.Size = UDim2.new(0.5,0,1,0)
-    local v = Label(row,r[2],12,CONFIG.Accent,Enum.TextXAlignment.Right)
-    v.Size     = UDim2.new(0.5,0,1,0)
-    v.Position = UDim2.new(0.5,0,0,0)
+local function EnableSilentAim()
+    if SilentAimHooked then return end
+    SilentAimHooked = true
+
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+    setreadonly(mt, false)
+
+    SilentAimOriginal = oldNamecall
+
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args   = {...}
+
+        if State_SilentAim and AimbotRunning and AimbotEnv.Locked then
+            -- Intercept ray-based hit detection used by most shooter games
+            if method == "FindPartOnRayWithWhitelist" or
+               method == "FindPartOnRay" or
+               method == "Raycast" then
+
+                local locked = AimbotEnv.Locked
+                local char   = locked and locked.Character
+                local part   = char and (char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart"))
+
+                if part then
+                    local cam      = workspace.CurrentCamera
+                    local mousePos = UserInputService:GetMouseLocation()
+
+                    if method == "Raycast" then
+                        -- args: origin (Vector3), direction (Vector3), params (RaycastParams?)
+                        local targetDir = (part.Position - args[1]).Unit
+                        local mag       = args[2] and args[2].Magnitude or 1000
+                        args[2]         = targetDir * mag
+
+                    elseif method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
+                        -- args: Ray object, whitelist table / bool
+                        local ray       = args[1]
+                        if typeof(ray) == "Ray" then
+                            local targetDir = (part.Position - ray.Origin).Unit
+                            args[1]         = Ray.new(ray.Origin, targetDir * ray.Direction.Magnitude)
+                        end
+                    end
+                end
+            end
+        end
+
+        return oldNamecall(self, table.unpack(args))
+    end)
+
+    setreadonly(mt, true)
+    Log("SILENT AIM ON")
 end
 
--- ============================================================
--- CONSOLE BAR
--- ============================================================
+local function DisableSilentAim()
+    if not SilentAimHooked then return end
+    local mt = getrawmetatable(game)
+    setreadonly(mt, false)
+    mt.__namecall = SilentAimOriginal
+    setreadonly(mt, true)
+    SilentAimHooked = false
+    SilentAimOriginal = nil
+    Log("SILENT AIM OFF")
+end
+
+-- Silent aim divider label
+local saDivider = Label(TAimbot,"-- SILENT AIM --",11,CONFIG.Accent,Enum.TextXAlignment.Center)
+saDivider.Size     = UDim2.new(1,0,0,14)
+saDivider.Position = UDim2.new(0,0,0,360)
+
+AimbotToggleRow(TAimbot,"SILENT AIM", 380, false, function(v)
+    State_SilentAim = v
+    if v then
+        pcall(EnableSilentAim)
+        if not SilentAimHooked then
+            -- Fallback: executor doesn't support metamethod hooks
+            Log("SILENT AIM: UNSUPPORTED EXECUTOR")
+            State_SilentAim = false
+        end
+    else
+        pcall(DisableSilentAim)
+    end
+end)
+
+local saNote = Label(TAimbot,"REQUIRES GETRAWMETATABLE SUPPORT",10,CONFIG.TextMuted,Enum.TextXAlignment.Center)
+saNote.Size     = UDim2.new(1,0,0,12)
+saNote.Position = UDim2.new(0,0,0,410)
+
+
 local ConsoleBar = Instance.new("Frame")
 ConsoleBar.Name             = "ConsoleBar"
 ConsoleBar.Size             = UDim2.new(1,0,0,58)
