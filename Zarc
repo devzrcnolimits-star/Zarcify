@@ -1,5 +1,5 @@
 -- ZarcWare | Loadstring compatible
--- Usage: loadstring(game:HttpGet("YOUR_RAW_URL"))()
+-- Usage: loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/Zarc"))()
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
