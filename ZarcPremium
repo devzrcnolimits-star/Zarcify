@@ -383,7 +383,7 @@ TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.SortOrder     = Enum.SortOrder.LayoutOrder
 TabLayout.Parent        = TabBar
 
-local TabNames = {"PLAYERS","HIGHLIGHTS","CHARACTER","AIMBOT","SILENT"}
+local TabNames = {"PLAYERS","HIGHLIGHTS","CHARACTER","AIM","MISC"}
 
 local function SetTab(name)
     for _, t in pairs(TabStates) do
@@ -1192,9 +1192,25 @@ end
 LocalPlayer.Chatted:Connect(HandleChat)
 
 -- ============================================================
--- TAB: AIMBOT
+-- TAB: AIM (Aimbot + Silent Aim combined)
 -- ============================================================
-local TAimbot = MakeTabFrame("AIMBOT")
+local TAimbot = MakeTabFrame("AIM")
+
+-- Make the AIM tab scrollable so both sections fit
+local AimScroll = Instance.new("ScrollingFrame")
+AimScroll.Size               = UDim2.new(1,0,1,0)
+AimScroll.BackgroundTransparency = 1
+AimScroll.ScrollBarThickness = 3
+AimScroll.CanvasSize         = UDim2.new(0,0,0,0)
+AimScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+AimScroll.Parent           = AimHolder
+MakePadding(AimScroll,4,4,8,4)
+
+-- We'll use absolute positioning inside AimScroll via a holder frame
+local AimHolder = Instance.new("Frame")
+AimHolder.Size              = UDim2.new(1,0,0,760)
+AimHolder.BackgroundTransparency = 1
+AimHolder.Parent            = AimScroll
 
 -- ---- Embed aimbot engine ----
 local AimbotRunning  = false
@@ -1369,15 +1385,19 @@ local function UnloadAimbot()
 end
 
 -- ---- Aimbot Tab UI ----
-local aimbotTitle = Label(TAimbot,"AIMBOT",18,CONFIG.Accent,Enum.TextXAlignment.Center)
-aimbotTitle.Size     = UDim2.new(1,0,0,24)
-aimbotTitle.Position = UDim2.new(0,0,0,0)
+local aimSectionA = Label(AimHolder,"-- AIMBOT --",12,CONFIG.Accent,Enum.TextXAlignment.Center)
+aimSectionA.Size     = UDim2.new(1,0,0,16)
+aimSectionA.Position = UDim2.new(0,0,0,0)
 
-local aimbotStatus = Label(TAimbot,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
-aimbotStatus.Size     = UDim2.new(1,0,0,18)
-aimbotStatus.Position = UDim2.new(0,0,0,28)
+local aimbotTitle = Label(AimHolder,"CAMERA LOCK",16,CONFIG.TextPrimary,Enum.TextXAlignment.Center)
+aimbotTitle.Size     = UDim2.new(1,0,0,20)
+aimbotTitle.Position = UDim2.new(0,0,0,18)
 
-local aimbotToggleBtn = PixelBtn(TAimbot,"[ TOGGLE AIMBOT ]",CONFIG.Accent,UDim2.new(0.6,0,0,36),UDim2.new(0.2,0,0,52))
+local aimbotStatus = Label(AimHolder,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
+aimbotStatus.Size     = UDim2.new(1,0,0,16)
+aimbotStatus.Position = UDim2.new(0,0,0,40)
+
+local aimbotToggleBtn = PixelBtn(AimHolder,"[ TOGGLE AIMBOT ]",CONFIG.Accent,UDim2.new(0.6,0,0,34),UDim2.new(0.2,0,0,60))
 aimbotToggleBtn.TextColor3 = CONFIG.Background
 
 aimbotToggleBtn.MouseButton1Click:Connect(function()
@@ -1399,7 +1419,7 @@ aimbotToggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- FOV slider
-local fovLbl = Label(TAimbot,"FOV RADIUS:",12,CONFIG.TextMuted)
+local fovLbl = Label(AimHolder,"FOV RADIUS:",12,CONFIG.TextMuted)
 fovLbl.Size     = UDim2.new(1,0,0,14)
 fovLbl.Position = UDim2.new(0,0,0,102)
 
@@ -1408,7 +1428,7 @@ FovTrack.Size             = UDim2.new(1,0,0,6)
 FovTrack.Position         = UDim2.new(0,0,0,122)
 FovTrack.BackgroundColor3 = CONFIG.Border
 FovTrack.BorderSizePixel  = 0
-FovTrack.Parent           = TAimbot
+FovTrack.Parent           = AimHolder
 MakeCorner(FovTrack,2)
 
 local FovFill = Instance.new("Frame")
@@ -1427,7 +1447,7 @@ FovHandle.BorderSizePixel = 0
 FovHandle.Parent          = FovTrack
 MakeCorner(FovHandle,2)
 
-local fovValLbl = Label(TAimbot,"FOV: 90",12,CONFIG.TextPrimary)
+local fovValLbl = Label(AimHolder,"FOV: 90",12,CONFIG.TextPrimary)
 fovValLbl.Size     = UDim2.new(1,0,0,14)
 fovValLbl.Position = UDim2.new(0,0,0,136)
 
@@ -1448,7 +1468,7 @@ UserInputService.InputChanged:Connect(function(i)
 end)
 
 -- Smoothness slider (controls Sensitivity: 0 = instant snap, 1 = very slow/smooth)
-local smoothLbl = Label(TAimbot,"SMOOTHNESS:",12,CONFIG.TextMuted)
+local smoothLbl = Label(AimHolder,"SMOOTHNESS:",12,CONFIG.TextMuted)
 smoothLbl.Size     = UDim2.new(1,0,0,14)
 smoothLbl.Position = UDim2.new(0,0,0,152)
 
@@ -1457,7 +1477,7 @@ SmTrack.Size             = UDim2.new(1,0,0,6)
 SmTrack.Position         = UDim2.new(0,0,0,172)
 SmTrack.BackgroundColor3 = CONFIG.Border
 SmTrack.BorderSizePixel  = 0
-SmTrack.Parent           = TAimbot
+SmTrack.Parent           = AimHolder
 MakeCorner(SmTrack,2)
 
 -- default smoothness = 0.15 (feels natural, not instant)
@@ -1480,7 +1500,7 @@ SmHandle.BorderSizePixel = 0
 SmHandle.Parent          = SmTrack
 MakeCorner(SmHandle,2)
 
-local smValLbl = Label(TAimbot,"SMOOTH: 0.15  (0=SNAP  1=SLOW)",11,CONFIG.TextPrimary)
+local smValLbl = Label(AimHolder,"SMOOTH: 0.15  (0=SNAP  1=SLOW)",11,CONFIG.TextPrimary)
 smValLbl.Size     = UDim2.new(1,0,0,14)
 smValLbl.Position = UDim2.new(0,0,0,186)
 
@@ -1529,14 +1549,57 @@ local function AimbotToggleRow(parent, labelText, yPos, default, callback)
     end)
 end
 
-AimbotToggleRow(TAimbot,"TEAM CHECK",  210, false, function(v) if AimbotEnv.Settings then AimbotEnv.Settings.TeamCheck  = v end end)
-AimbotToggleRow(TAimbot,"ALIVE CHECK", 240, true,  function(v) if AimbotEnv.Settings then AimbotEnv.Settings.AliveCheck = v end end)
-AimbotToggleRow(TAimbot,"TOGGLE MODE", 270, false, function(v) if AimbotEnv.Settings then AimbotEnv.Settings.Toggle     = v end end)
-AimbotToggleRow(TAimbot,"FOV VISIBLE", 300, true,  function(v) if AimbotEnv.FOVSettings then AimbotEnv.FOVSettings.Visible = v end end)
+AimbotToggleRow(AimHolder,"TEAM CHECK",  210, false, function(v) if AimbotEnv.Settings then AimbotEnv.Settings.TeamCheck  = v end end)
+AimbotToggleRow(AimHolder,"ALIVE CHECK", 240, true,  function(v) if AimbotEnv.Settings then AimbotEnv.Settings.AliveCheck = v end end)
+AimbotToggleRow(AimHolder,"TOGGLE MODE", 270, false, function(v) if AimbotEnv.Settings then AimbotEnv.Settings.Toggle     = v end end)
+AimbotToggleRow(AimHolder,"FOV VISIBLE", 300, true,  function(v) if AimbotEnv.FOVSettings then AimbotEnv.FOVSettings.Visible = v end end)
 
-local aimbotHint = Label(TAimbot,"HOLD RMB TO LOCK ON TARGET",11,CONFIG.TextMuted,Enum.TextXAlignment.Center)
+-- Aimbot target part selector
+local abPartLbl = Label(AimHolder,"TARGET PART:",12,CONFIG.TextMuted)
+abPartLbl.Size     = UDim2.new(1,0,0,14)
+abPartLbl.Position = UDim2.new(0,0,0,332)
+
+local abParts    = {"Head","HumanoidRootPart","UpperTorso","LowerTorso"}
+local abPartBtns = {}
+local abPartRow  = Instance.new("Frame")
+abPartRow.Size              = UDim2.new(1,0,0,28)
+abPartRow.Position          = UDim2.new(0,0,0,350)
+abPartRow.BackgroundTransparency = 1
+abPartRow.Parent            = AimHolder
+
+local abPartLayout = Instance.new("UIListLayout")
+abPartLayout.FillDirection = Enum.FillDirection.Horizontal
+abPartLayout.Padding       = UDim.new(0,4)
+abPartLayout.Parent        = abPartRow
+
+for _, pname in ipairs(abParts) do
+    local pb = Instance.new("TextButton")
+    pb.Size             = UDim2.new(0, pname == "Head" and 46 or pname == "HumanoidRootPart" and 106 or 70, 0, 26)
+    pb.BackgroundColor3 = pname == "Head" and CONFIG.Accent or CONFIG.Surface
+    pb.TextColor3       = pname == "Head" and CONFIG.Background or CONFIG.TextMuted
+    pb.Text             = pname == "Head" and "HEAD" or pname == "HumanoidRootPart" and "ROOT" or pname == "UpperTorso" and "UPPER" or "LOWER"
+    pb.TextSize         = 10
+    pb.Font             = PF
+    pb.BorderSizePixel  = 0
+    pb.Parent           = abPartRow
+    MakeCorner(pb,2)
+    MakeStroke(pb,CONFIG.Border,1)
+    abPartBtns[pname] = pb
+    pb.MouseButton1Click:Connect(function()
+        if AimbotEnv.Settings then AimbotEnv.Settings.LockPart = pname end
+        for _, other in pairs(abPartBtns) do
+            other.BackgroundColor3 = CONFIG.Surface
+            other.TextColor3       = CONFIG.TextMuted
+        end
+        pb.BackgroundColor3 = CONFIG.Accent
+        pb.TextColor3       = CONFIG.Background
+        Log("AIMBOT TARGET: " .. pname)
+    end)
+end
+
+local aimbotHint = Label(AimHolder,"HOLD RMB TO LOCK ON TARGET",11,CONFIG.TextMuted,Enum.TextXAlignment.Center)
 aimbotHint.Size     = UDim2.new(1,0,0,14)
-aimbotHint.Position = UDim2.new(0,0,0,334)
+aimbotHint.Position = UDim2.new(0,0,0,386)
 
 -- ============================================================
 -- SILENT AIM ENGINE + TAB
@@ -1649,19 +1712,21 @@ local function SA_Disable()
     Log("SILENT AIM OFF")
 end
 
--- ---- Silent Aim Tab UI ----
-local TSilent = MakeTabFrame("SILENT")
+-- ---- Silent Aim Section (in AIM tab, below aimbot) ----
+local silentDivider = Label(AimHolder,"-- SILENT AIM --",12,CONFIG.Accent,Enum.TextXAlignment.Center)
+silentDivider.Size     = UDim2.new(1,0,0,16)
+silentDivider.Position = UDim2.new(0,0,0,408)
 
 -- Main toggle
-local saTitle = Label(TSilent,"SILENT AIM",18,CONFIG.Accent,Enum.TextXAlignment.Center)
-saTitle.Size     = UDim2.new(1,0,0,24)
-saTitle.Position = UDim2.new(0,0,0,0)
+local saTitle = Label(AimHolder,"BULLET REDIRECT",16,CONFIG.TextPrimary,Enum.TextXAlignment.Center)
+saTitle.Size     = UDim2.new(1,0,0,20)
+saTitle.Position = UDim2.new(0,0,0,428)
 
-local saStatus = Label(TSilent,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
-saStatus.Size     = UDim2.new(1,0,0,18)
-saStatus.Position = UDim2.new(0,0,0,28)
+local saStatus = Label(AimHolder,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
+saStatus.Size     = UDim2.new(1,0,0,16)
+saStatus.Position = UDim2.new(0,0,0,450)
 
-local saToggleBtn = PixelBtn(TSilent,"[ TOGGLE SILENT AIM ]",CONFIG.Accent,UDim2.new(0.7,0,0,36),UDim2.new(0.15,0,0,52))
+local saToggleBtn = PixelBtn(AimHolder,"[ TOGGLE SILENT AIM ]",CONFIG.Accent,UDim2.new(0.7,0,0,34),UDim2.new(0.15,0,0,470))
 saToggleBtn.TextColor3 = CONFIG.Background
 
 saToggleBtn.MouseButton1Click:Connect(function()
@@ -1687,16 +1752,16 @@ saToggleBtn.MouseButton1Click:Connect(function()
 end)
 
 -- FOV Radius slider
-local saFovLbl = Label(TSilent,"FOV RADIUS:",12,CONFIG.TextMuted)
+local saFovLbl = Label(AimHolder,"FOV RADIUS:",12,CONFIG.TextMuted)
 saFovLbl.Size     = UDim2.new(1,0,0,14)
-saFovLbl.Position = UDim2.new(0,0,0,104)
+saFovLbl.Position = UDim2.new(0,0,0,518)
 
 local SAFovTrack = Instance.new("Frame")
 SAFovTrack.Size             = UDim2.new(1,0,0,6)
-SAFovTrack.Position         = UDim2.new(0,0,0,122)
+SAFovTrack.Position         = UDim2.new(0,0,0,536)
 SAFovTrack.BackgroundColor3 = CONFIG.Border
 SAFovTrack.BorderSizePixel  = 0
-SAFovTrack.Parent           = TSilent
+SAFovTrack.Parent            = AimHolder
 MakeCorner(SAFovTrack,2)
 
 local SAFovFill = Instance.new("Frame")
@@ -1715,9 +1780,9 @@ SAFovHandle.BorderSizePixel = 0
 SAFovHandle.Parent          = SAFovTrack
 MakeCorner(SAFovHandle,2)
 
-local saFovVal = Label(TSilent,"FOV: 150",12,CONFIG.TextPrimary)
+local saFovVal = Label(AimHolder,"FOV: 150",12,CONFIG.TextPrimary)
 saFovVal.Size     = UDim2.new(1,0,0,14)
-saFovVal.Position = UDim2.new(0,0,0,136)
+saFovVal.Position = UDim2.new(0,0,0,548)
 
 local saFovDrag = false
 SAFovHandle.MouseButton1Down:Connect(function() saFovDrag = true end)
@@ -1735,17 +1800,17 @@ UserInputService.InputChanged:Connect(function(i)
 end)
 
 -- Target part selector buttons
-local saPartLbl = Label(TSilent,"TARGET PART:",12,CONFIG.TextMuted)
+local saPartLbl = Label(AimHolder,"TARGET PART:",12,CONFIG.TextMuted)
 saPartLbl.Size     = UDim2.new(1,0,0,14)
-saPartLbl.Position = UDim2.new(0,0,0,162)
+saPartLbl.Position = UDim2.new(0,0,0,570)
 
 local parts    = {"Head","HumanoidRootPart","UpperTorso","LowerTorso"}
 local partBtns = {}
 local partRow  = Instance.new("Frame")
 partRow.Size              = UDim2.new(1,0,0,28)
-partRow.Position          = UDim2.new(0,0,0,180)
+partRow.Position          = UDim2.new(0,0,0,588)
 partRow.BackgroundTransparency = 1
-partRow.Parent            = TSilent
+partRow.Parent            = AimHolder
 
 local partLayout = Instance.new("UIListLayout")
 partLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -1783,7 +1848,7 @@ local function SAToggleRow(labelText, yPos, default, callback)
     container.Size              = UDim2.new(1,0,0,26)
     container.Position          = UDim2.new(0,0,0,yPos)
     container.BackgroundTransparency = 1
-    container.Parent            = TSilent
+    container.Parent            = AimHolder
     local lbl = Label(container,labelText,12,CONFIG.TextPrimary)
     lbl.Size = UDim2.new(0.72,0,1,0)
     local track = Instance.new("TextButton")
@@ -1805,17 +1870,481 @@ local function SAToggleRow(labelText, yPos, default, callback)
     end)
 end
 
-SAToggleRow("CHECK FOV",    218, true,  function(v) SA.CheckFOV   = v end)
-SAToggleRow("ALIVE CHECK",  248, true,  function(v) SA.AliveCheck = v end)
-SAToggleRow("TEAM CHECK",   278, false, function(v) SA.TeamCheck  = v end)
+SAToggleRow("CHECK FOV",    624, true,  function(v) SA.CheckFOV   = v end)
+SAToggleRow("ALIVE CHECK",  654, true,  function(v) SA.AliveCheck = v end)
+SAToggleRow("TEAM CHECK",   684, false, function(v) SA.TeamCheck  = v end)
 
-local saHint = Label(TSilent,"WORKS WITHOUT HOLDING RMB",11,CONFIG.TextMuted,Enum.TextXAlignment.Center)
+local saHint = Label(AimHolder,"WORKS WITHOUT HOLDING RMB",11,CONFIG.TextMuted,Enum.TextXAlignment.Center)
 saHint.Size     = UDim2.new(1,0,0,14)
-saHint.Position = UDim2.new(0,0,0,314)
+saHint.Position = UDim2.new(0,0,0,718)
 
-local saHint2 = Label(TSilent,"NEEDS GETRAWMETATABLE + SETREADONLY",10,CONFIG.TextMuted,Enum.TextXAlignment.Center)
+local saHint2 = Label(AimHolder,"NEEDS GETRAWMETATABLE + SETREADONLY",10,CONFIG.TextMuted,Enum.TextXAlignment.Center)
 saHint2.Size     = UDim2.new(1,0,0,12)
-saHint2.Position = UDim2.new(0,0,0,330)
+saHint2.Position = UDim2.new(0,0,0,736)
+
+-- ---- Triggerbot Section ----
+local tbDivider = Label(AimHolder,"-- TRIGGERBOT --",12,CONFIG.Accent,Enum.TextXAlignment.Center)
+tbDivider.Size     = UDim2.new(1,0,0,16)
+tbDivider.Position = UDim2.new(0,0,0,760)
+
+local tbDesc = Label(AimHolder,"AUTO SHOOTS WHEN AIM ON TARGET",11,CONFIG.TextMuted,Enum.TextXAlignment.Center)
+tbDesc.Size     = UDim2.new(1,0,0,14)
+tbDesc.Position = UDim2.new(0,0,0,778)
+
+local tbStatus = Label(AimHolder,"STATUS: OFF",13,Color3.fromRGB(180,40,40),Enum.TextXAlignment.Center)
+tbStatus.Size     = UDim2.new(1,0,0,16)
+tbStatus.Position = UDim2.new(0,0,0,796)
+
+local tbToggleBtn = PixelBtn(AimHolder,"[ TOGGLE TRIGGERBOT ]",CONFIG.Accent,UDim2.new(0.7,0,0,34),UDim2.new(0.15,0,0,816))
+tbToggleBtn.TextColor3 = CONFIG.Background
+
+-- Shot delay slider
+local tbDelayLbl = Label(AimHolder,"SHOT DELAY (S):",12,CONFIG.TextMuted)
+tbDelayLbl.Size     = UDim2.new(1,0,0,14)
+tbDelayLbl.Position = UDim2.new(0,0,0,858)
+
+local TBTrack = Instance.new("Frame")
+TBTrack.Size             = UDim2.new(1,0,0,6)
+TBTrack.Position         = UDim2.new(0,0,0,876)
+TBTrack.BackgroundColor3 = CONFIG.Border
+TBTrack.BorderSizePixel  = 0
+TBTrack.Parent           = AimHolder
+MakeCorner(TBTrack,2)
+
+local TBFill = Instance.new("Frame")
+TBFill.Size              = UDim2.new(0.1,0,1,0)
+TBFill.BackgroundColor3  = CONFIG.Accent
+TBFill.BorderSizePixel   = 0
+TBFill.Parent            = TBTrack
+MakeCorner(TBFill,2)
+
+local TBHandle = Instance.new("TextButton")
+TBHandle.Size            = UDim2.new(0,16,0,16)
+TBHandle.Position        = UDim2.new(0.1,-8,0.5,-8)
+TBHandle.BackgroundColor3 = Color3.new(1,1,1)
+TBHandle.Text            = ""
+TBHandle.BorderSizePixel = 0
+TBHandle.Parent          = TBTrack
+MakeCorner(TBHandle,2)
+
+local tbDelayVal = Label(AimHolder,"DELAY: 0.10s",12,CONFIG.TextPrimary)
+tbDelayVal.Size     = UDim2.new(1,0,0,14)
+tbDelayVal.Position = UDim2.new(0,0,0,888)
+
+-- TB part selector
+local tbPartLbl = Label(AimHolder,"TARGET PART:",12,CONFIG.TextMuted)
+tbPartLbl.Size     = UDim2.new(1,0,0,14)
+tbPartLbl.Position = UDim2.new(0,0,0,910)
+
+local tbParts    = {"Head","HumanoidRootPart","UpperTorso","LowerTorso"}
+local tbPartBtns = {}
+local tbPartRow  = Instance.new("Frame")
+tbPartRow.Size              = UDim2.new(1,0,0,28)
+tbPartRow.Position          = UDim2.new(0,0,0,928)
+tbPartRow.BackgroundTransparency = 1
+tbPartRow.Parent            = AimHolder
+
+local tbPartLayout = Instance.new("UIListLayout")
+tbPartLayout.FillDirection = Enum.FillDirection.Horizontal
+tbPartLayout.Padding       = UDim.new(0,4)
+tbPartLayout.Parent        = tbPartRow
+
+local TB = {
+    Enabled    = false,
+    Delay      = 0.1,
+    TeamCheck  = false,
+    AliveCheck = true,
+    LockPart   = "Head",
+    LastShot   = 0,
+    Connection = nil,
+}
+
+for _, pname in ipairs(tbParts) do
+    local pb = Instance.new("TextButton")
+    pb.Size             = UDim2.new(0, pname=="Head" and 46 or pname=="HumanoidRootPart" and 106 or 70, 0, 26)
+    pb.BackgroundColor3 = pname=="Head" and CONFIG.Accent or CONFIG.Surface
+    pb.TextColor3       = pname=="Head" and CONFIG.Background or CONFIG.TextMuted
+    pb.Text             = pname=="Head" and "HEAD" or pname=="HumanoidRootPart" and "ROOT" or pname=="UpperTorso" and "UPPER" or "LOWER"
+    pb.TextSize         = 10; pb.Font = PF
+    pb.BorderSizePixel  = 0
+    pb.Parent           = tbPartRow
+    MakeCorner(pb,2); MakeStroke(pb,CONFIG.Border,1)
+    tbPartBtns[pname] = pb
+    pb.MouseButton1Click:Connect(function()
+        TB.LockPart = pname
+        for _, other in pairs(tbPartBtns) do
+            other.BackgroundColor3 = CONFIG.Surface
+            other.TextColor3       = CONFIG.TextMuted
+        end
+        pb.BackgroundColor3 = CONFIG.Accent
+        pb.TextColor3       = CONFIG.Background
+        Log("TB TARGET: "..pname)
+    end)
+end
+
+AimbotToggleRow(AimHolder,"TB TEAM CHECK",  960, false, function(v) TB.TeamCheck  = v end)
+AimbotToggleRow(AimHolder,"TB ALIVE CHECK", 990, true,  function(v) TB.AliveCheck = v end)
+
+local function TB_GetOnTarget()
+    local cam      = workspace.CurrentCamera
+    local mousePos = UserInputService:GetMouseLocation()
+    local unitRay  = cam:ScreenPointToRay(mousePos.X, mousePos.Y)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        local char = player.Character
+        if not char then continue end
+        local part = char:FindFirstChild(TB.LockPart) or char:FindFirstChild("HumanoidRootPart")
+        local hum  = char:FindFirstChildOfClass("Humanoid")
+        if not part or not hum then continue end
+        if TB.AliveCheck and hum.Health <= 0 then continue end
+        if TB.TeamCheck  and player.Team == LocalPlayer.Team then continue end
+        local toTarget = (part.Position - unitRay.Origin)
+        local angle    = math.acos(math.clamp(toTarget.Unit:Dot(unitRay.Direction), -1, 1))
+        if math.deg(angle) < 2.5 then return true end
+    end
+    return false
+end
+
+local function TB_Start()
+    TB.Connection = RunService.Heartbeat:Connect(function()
+        if not TB.Enabled then return end
+        if (os.clock() - TB.LastShot) < TB.Delay then return end
+        if TB_GetOnTarget() then
+            pcall(function() mouse1click() end)
+            pcall(function()
+                local vim = game:GetService("VirtualInputManager")
+                vim:SendMouseButtonEvent(0,0,0,true,game,0)
+                vim:SendMouseButtonEvent(0,0,0,false,game,0)
+            end)
+            TB.LastShot = os.clock()
+        end
+    end)
+    Log("TRIGGERBOT ON | DELAY: "..TB.Delay.."s")
+end
+
+local function TB_Stop()
+    if TB.Connection then TB.Connection:Disconnect(); TB.Connection = nil end
+    Log("TRIGGERBOT OFF")
+end
+
+tbToggleBtn.MouseButton1Click:Connect(function()
+    TB.Enabled = not TB.Enabled
+    if TB.Enabled then
+        TB_Start()
+        tbStatus.Text       = "STATUS: ON"
+        tbStatus.TextColor3 = Color3.fromRGB(88,214,141)
+        tbToggleBtn.BackgroundColor3 = Color3.fromRGB(35,134,54)
+    else
+        TB_Stop()
+        tbStatus.Text       = "STATUS: OFF"
+        tbStatus.TextColor3 = Color3.fromRGB(180,40,40)
+        tbToggleBtn.BackgroundColor3 = CONFIG.Accent
+    end
+end)
+
+local tbDrag = false
+TBHandle.MouseButton1Down:Connect(function() tbDrag = true end)
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then tbDrag = false end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if tbDrag and i.UserInputType == Enum.UserInputType.MouseMovement then
+        local rel  = math.clamp((i.Position.X-TBTrack.AbsolutePosition.X)/TBTrack.AbsoluteSize.X,0,1)
+        TB.Delay   = math.floor(rel*100)/100
+        TBFill.Size      = UDim2.new(rel,0,1,0)
+        TBHandle.Position = UDim2.new(rel,-8,0.5,-8)
+        tbDelayVal.Text  = "DELAY: "..string.format("%.2f",TB.Delay).."s"
+    end
+end)
+
+-- Expand AimHolder to fit triggerbot
+AimHolder.Size = UDim2.new(1,0,0,1020)
+
+-- ============================================================
+-- TAB: MISC (No Spread, No Recoil, Rapid Fire)
+-- ============================================================
+local TMisc = MakeTabFrame("MISC")
+
+local MiscScroll = Instance.new("ScrollingFrame")
+MiscScroll.Size               = UDim2.new(1,0,1,0)
+MiscScroll.BackgroundTransparency = 1
+MiscScroll.ScrollBarThickness = 3
+MiscScroll.CanvasSize         = UDim2.new(0,0,0,0)
+MiscScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+MiscScroll.Parent             = TMisc
+
+local MiscLayout = Instance.new("UIListLayout")
+MiscLayout.SortOrder = Enum.SortOrder.LayoutOrder
+MiscLayout.Padding   = UDim.new(0,6)
+MiscLayout.Parent    = MiscScroll
+MakePadding(MiscScroll,4,4,8,4)
+
+local miscOrder = 0
+
+local function MiscSection(title)
+    miscOrder += 1
+    local lbl = Instance.new("TextLabel")
+    lbl.Size             = UDim2.new(1,0,0,14)
+    lbl.BackgroundTransparency = 1
+    lbl.Text             = "-- "..title.." --"
+    lbl.TextColor3       = CONFIG.Accent
+    lbl.TextSize         = 11
+    lbl.Font             = PF
+    lbl.TextXAlignment   = Enum.TextXAlignment.Left
+    lbl.LayoutOrder      = miscOrder
+    lbl.Parent           = MiscScroll
+end
+
+local function MiscToggle(labelText, descText, default, callback)
+    miscOrder += 1
+    local container = Instance.new("Frame")
+    container.Size             = UDim2.new(1,0,0,50)
+    container.BackgroundColor3 = CONFIG.Surface
+    container.BorderSizePixel  = 0
+    container.LayoutOrder      = miscOrder
+    container.Parent           = MiscScroll
+    MakeCorner(container,2)
+    MakeStroke(container,CONFIG.Border,1)
+    MakePadding(container,6,10,6,10)
+
+    local nameLbl = Label(container, labelText, 13, CONFIG.TextPrimary)
+    nameLbl.Size = UDim2.new(0.7,0,0,18); nameLbl.Position = UDim2.new(0,0,0,0)
+
+    local desc = Label(container, descText, 10, CONFIG.TextMuted)
+    desc.Size = UDim2.new(1,0,0,12); desc.Position = UDim2.new(0,0,0,20)
+
+    local statusLbl = Label(container, default and "ON" or "OFF", 11,
+        default and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40), Enum.TextXAlignment.Right)
+    statusLbl.Size = UDim2.new(0.3,0,0,18); statusLbl.Position = UDim2.new(0.7,0,0,0)
+
+    local btn = Instance.new("TextButton")
+    btn.Size             = UDim2.new(0,42,0,20)
+    btn.Position         = UDim2.new(1,-42,0,28)
+    btn.BackgroundColor3 = default and Color3.fromRGB(35,134,54) or CONFIG.Border
+    btn.Text             = "[ ]"
+    btn.TextSize         = 10; btn.Font = PF
+    btn.TextColor3       = Color3.new(1,1,1)
+    btn.BorderSizePixel  = 0
+    btn.Parent           = container
+    MakeCorner(btn,2)
+
+    local on = default
+    btn.MouseButton1Click:Connect(function()
+        on = not on
+        Tween(btn,TweenInfo.new(0.12),{BackgroundColor3=on and Color3.fromRGB(35,134,54) or CONFIG.Border})
+        statusLbl.Text       = on and "ON" or "OFF"
+        statusLbl.TextColor3 = on and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40)
+        callback(on)
+    end)
+end
+
+-- ===== NO SPREAD =====
+MiscSection("NO SPREAD")
+
+local NS = { Enabled = false, Original = nil, Hooked = false }
+
+local function NS_Enable()
+    if NS.Hooked then return end
+    local ok, mt = pcall(getrawmetatable, game)
+    if not ok then Log("NO SPREAD: NO GETRAWMETATABLE"); return end
+    local oldNC = mt.__namecall
+    NS.Original = oldNC
+    pcall(setreadonly, mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        -- Intercept FireServer calls used by most gun tools to zero spread
+        if NS.Enabled and method == "FireServer" then
+            local args = {...}
+            -- Many games pass a spread/direction Vector3 as arg[2] or arg[3]
+            -- Replace any Vector3 direction args with a perfectly aimed version
+            for i, v in ipairs(args) do
+                if typeof(v) == "Vector3" and i <= 4 then
+                    local cam = workspace.CurrentCamera
+                    -- Snap to camera look direction (no spread)
+                    args[i] = cam.CFrame.LookVector * v.Magnitude
+                end
+            end
+            return oldNC(self, table.unpack(args))
+        end
+        return oldNC(self, ...)
+    end)
+    pcall(setreadonly, mt, true)
+    NS.Hooked = true
+    Log("NO SPREAD ON")
+end
+
+local function NS_Disable()
+    if not NS.Hooked or not NS.Original then return end
+    local ok, mt = pcall(getrawmetatable, game)
+    if not ok then return end
+    pcall(setreadonly, mt, false)
+    mt.__namecall = NS.Original
+    pcall(setreadonly, mt, true)
+    NS.Hooked = false; NS.Original = nil
+    Log("NO SPREAD OFF")
+end
+
+MiscToggle("NO SPREAD", "Removes bullet spread on FireServer calls", false, function(v)
+    NS.Enabled = v
+    if v then
+        pcall(NS_Enable)
+        if not NS.Hooked then Log("NO SPREAD: UNSUPPORTED"); NS.Enabled = false end
+    else
+        pcall(NS_Disable)
+    end
+end)
+
+-- ===== NO RECOIL =====
+MiscSection("NO RECOIL")
+
+local NR = { Enabled = false, Connection = nil }
+
+local function NR_Start()
+    -- Constantly zero the camera's CFrame vertical drift each frame
+    local lastCF = workspace.CurrentCamera.CFrame
+    NR.Connection = RunService.RenderStepped:Connect(function()
+        if not NR.Enabled then return end
+        local cam  = workspace.CurrentCamera
+        local curr = cam.CFrame
+        -- Measure vertical delta from last frame and cancel it out
+        local pitchDelta = curr:ToEulerAnglesYXZ() - lastCF:ToEulerAnglesYXZ()
+        -- Only cancel upward kick (positive pitch change means recoil)
+        if pitchDelta > 0.001 then
+            local x, y, z = curr:ToEulerAnglesYXZ()
+            cam.CFrame = CFrame.new(curr.Position) * CFrame.fromEulerAnglesYXZ(x - pitchDelta, y, z)
+        end
+        lastCF = cam.CFrame
+    end)
+    Log("NO RECOIL ON")
+end
+
+local function NR_Stop()
+    if NR.Connection then NR.Connection:Disconnect(); NR.Connection = nil end
+    Log("NO RECOIL OFF")
+end
+
+MiscToggle("NO RECOIL", "Cancels upward camera kick each frame", false, function(v)
+    NR.Enabled = v
+    if v then NR_Start() else NR_Stop() end
+end)
+
+-- ===== RAPID FIRE =====
+MiscSection("RAPID FIRE")
+
+local RF = {
+    Enabled   = false,
+    Rate      = 0.05, -- seconds between shots
+    Original  = nil,
+    Hooked    = false,
+    LastFire  = 0,
+}
+
+local function RF_Enable()
+    if RF.Hooked then return end
+    local ok, mt = pcall(getrawmetatable, game)
+    if not ok then Log("RAPID FIRE: NO GETRAWMETATABLE"); return end
+    local oldNC = mt.__namecall
+    RF.Original = oldNC
+    pcall(setreadonly, mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if RF.Enabled and method == "FireServer" then
+            local now = os.clock()
+            if (now - RF.LastFire) >= RF.Rate then
+                RF.LastFire = now
+                -- Fire once normally
+                local r1 = oldNC(self, ...)
+                -- Fire an extra burst
+                task.defer(function()
+                    pcall(function() oldNC(self, ...) end)
+                end)
+                return r1
+            end
+        end
+        return oldNC(self, ...)
+    end)
+    pcall(setreadonly, mt, true)
+    RF.Hooked = true
+    Log("RAPID FIRE ON | RATE: "..RF.Rate.."s")
+end
+
+local function RF_Disable()
+    if not RF.Hooked or not RF.Original then return end
+    local ok, mt = pcall(getrawmetatable, game)
+    if not ok then return end
+    pcall(setreadonly, mt, false)
+    mt.__namecall = RF.Original
+    pcall(setreadonly, mt, true)
+    RF.Hooked = false; RF.Original = nil
+    Log("RAPID FIRE OFF")
+end
+
+MiscToggle("RAPID FIRE", "Doubles FireServer fire rate via hook", false, function(v)
+    RF.Enabled = v
+    if v then
+        pcall(RF_Enable)
+        if not RF.Hooked then Log("RAPID FIRE: UNSUPPORTED"); RF.Enabled = false end
+    else
+        pcall(RF_Disable)
+    end
+end)
+
+-- Fire rate slider
+miscOrder += 1
+local rfRateContainer = Instance.new("Frame")
+rfRateContainer.Size             = UDim2.new(1,0,0,42)
+rfRateContainer.BackgroundColor3 = CONFIG.Surface
+rfRateContainer.BorderSizePixel  = 0
+rfRateContainer.LayoutOrder      = miscOrder
+rfRateContainer.Parent           = MiscScroll
+MakeCorner(rfRateContainer,2)
+MakeStroke(rfRateContainer,CONFIG.Border,1)
+MakePadding(rfRateContainer,6,10,6,10)
+
+local rfLbl = Label(rfRateContainer,"FIRE RATE (S):",11,CONFIG.TextMuted)
+rfLbl.Size = UDim2.new(0.6,0,0,14); rfLbl.Position = UDim2.new(0,0,0,0)
+
+local rfValLbl = Label(rfRateContainer,"0.05s",11,CONFIG.TextPrimary,Enum.TextXAlignment.Right)
+rfValLbl.Size = UDim2.new(0.4,0,0,14); rfValLbl.Position = UDim2.new(0.6,0,0,0)
+
+local RFTrack = Instance.new("Frame")
+RFTrack.Size             = UDim2.new(1,0,0,5)
+RFTrack.Position         = UDim2.new(0,0,1,-12)
+RFTrack.BackgroundColor3 = CONFIG.Border
+RFTrack.BorderSizePixel  = 0
+RFTrack.Parent           = rfRateContainer
+MakeCorner(RFTrack,2)
+
+local RFFill = Instance.new("Frame")
+RFFill.Size              = UDim2.new(0.05,0,1,0)
+RFFill.BackgroundColor3  = CONFIG.Accent
+RFFill.BorderSizePixel   = 0
+RFFill.Parent            = RFTrack
+MakeCorner(RFFill,2)
+
+local RFHandle = Instance.new("TextButton")
+RFHandle.Size            = UDim2.new(0,14,0,14)
+RFHandle.Position        = UDim2.new(0.05,-7,0.5,-7)
+RFHandle.BackgroundColor3 = Color3.new(1,1,1)
+RFHandle.Text            = ""
+RFHandle.BorderSizePixel = 0
+RFHandle.Parent          = RFTrack
+MakeCorner(RFHandle,2)
+
+local rfDrag = false
+RFHandle.MouseButton1Down:Connect(function() rfDrag = true end)
+UserInputService.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then rfDrag = false end
+end)
+UserInputService.InputChanged:Connect(function(i)
+    if rfDrag and i.UserInputType == Enum.UserInputType.MouseMovement then
+        local rel  = math.clamp((i.Position.X-RFTrack.AbsolutePosition.X)/RFTrack.AbsoluteSize.X,0,1)
+        RF.Rate    = math.floor(rel*100)/1000  -- 0.000 to 0.100s
+        RFFill.Size      = UDim2.new(rel,0,1,0)
+        RFHandle.Position = UDim2.new(rel,-7,0.5,-7)
+        rfValLbl.Text    = string.format("%.3f",RF.Rate).."s"
+    end
+end)
 
 -- ============================================================
 -- CONSOLE BAR
