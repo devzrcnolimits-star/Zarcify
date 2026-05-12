@@ -1,21 +1,21 @@
--- ZarcWare Premium | Loadstring compatible
--- Usage: loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/ZarcPremium"))()
+-- ZarcWare Premium
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/ZarcPremium"))()
 
---// Services
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
 local LocalPlayer      = Players.LocalPlayer
+local PlayerGui        = LocalPlayer:WaitForChild("PlayerGui", 15)
+if not PlayerGui then return end
 
---// Config
 local CFG = {
     Accent      = Color3.fromRGB(255, 210, 50),
     Background  = Color3.fromRGB(10, 10, 14),
     Surface     = Color3.fromRGB(18, 18, 24),
     Border      = Color3.fromRGB(60, 55, 35),
-    TextPrimary = Color3.fromRGB(255, 240, 200),
-    TextMuted   = Color3.fromRGB(150, 135, 90),
+    TextPri     = Color3.fromRGB(255, 240, 200),
+    TextMut     = Color3.fromRGB(150, 135, 90),
     Font        = Enum.Font.Arcade,
     ToggleKey   = Enum.KeyCode.RightShift,
     HLColors    = {
@@ -29,282 +29,213 @@ local CFG = {
 }
 local PF = CFG.Font
 
---// ============================================================
---// STATE (all declared upfront to avoid nil errors)
---// ============================================================
-local State = {
-    -- GUI
-    Visible        = true,
-    Dragging       = false,
-    SelectedPlayer = nil,
-    -- Highlight
-    HLColor        = CFG.HLColors[1].Color,
-    HLTransparency = 0.5,
-    HLFill         = true,
-    HLOutline      = false,
-    HLBox          = false,
-    HLTracers      = false,
-    Highlights     = {},
-    BoxLines       = {},
-    TracerLines    = {},
-    BoxConn        = nil,
-    TracerConn     = nil,
-    -- Fly
-    Flying         = false,
-    FlySpeed       = 60,
-    FlyConn        = nil,
-    FlyStateConn   = nil,
-    -- Noclip
-    Noclip         = false,
-    NoclipConn     = nil,
-    -- Speed
-    SpeedActive    = false,
-    WalkSpeed      = 16,
-    JumpPower      = 50,
-    SpeedConn      = nil,
-    -- Gravity
-    GravityActive  = false,
-    DefaultGravity = workspace.Gravity,
-    -- Extras
-    InfJump        = false,
-    GhostMode      = false,
-    -- Aimbot
-    AimbotOn       = false,
-    AimbotRunning  = false,
-    AimbotLocked   = nil,
-    AimbotConns    = {},
-    AimbotSettings = {
-        Sensitivity  = 0.15,
-        FOVAmount    = 90,
-        FOVVisible   = true,
-        TeamCheck    = false,
-        AliveCheck   = true,
-        Toggle       = false,
-        LockPart     = "Head",
-    },
-    AimbotFOVCircle = nil,
-    -- Silent Aim
-    SilentOn       = false,
-    SilentHooked   = false,
-    SilentOriginal = nil,
-    SilentSettings = {
-        FOVRadius  = 150,
-        CheckFOV   = true,
-        AliveCheck = true,
-        TeamCheck  = false,
-        LockPart   = "Head",
-    },
-    -- Triggerbot
-    TriggerOn      = false,
-    TriggerDelay   = 0.05,
-    TriggerConn    = nil,
-    -- MISC
-    NoSpread       = false,
-    NoRecoil       = false,
-    RapidFire      = false,
-    Wallbang       = false,
-    MiscConns      = {},
-    MiscHooked     = false,
-    MiscOriginal   = nil,
+-- All state in one table, no executor globals, no workspace calls here
+local S = {
+    Visible=true, Dragging=false, SelectedPlayer=nil,
+    HLColor=CFG.HLColors[1].Color, HLTrans=0.5, HLFill=true, HLOutline=false,
+    HLBox=false, HLTracers=false,
+    Highlights={}, BoxLines={}, TracerLines={},
+    BoxConn=nil, TracerConn=nil,
+    Flying=false, FlySpeed=60, FlyConn=nil, FlyStateConn=nil,
+    Noclip=false, NoclipConn=nil,
+    SpeedActive=false, WalkSpeed=16, JumpPower=50, SpeedConn=nil,
+    GravityActive=false, DefaultGravity=196.2,
+    InfJump=false,
+    AimbotOn=false, AimbotTyping=false, AimbotLocked=nil,
+    AimbotConns={}, AimbotFOV=nil,
+    AimbotCfg={FOVAmount=90,FOVVisible=true,Sensitivity=0.15,TeamCheck=false,AliveCheck=true,Toggle=false,LockPart="Head"},
+    SilentOn=false, SilentHooked=false, SilentOrig=nil,
+    SilentCfg={FOVRadius=150,CheckFOV=true,AliveCheck=true,TeamCheck=false,LockPart="Head"},
+    TriggerOn=false, TriggerDelay=0.05, TriggerConn=nil,
+    NoSpread=false, NoRecoil=false, RapidFire=false, Wallbang=false,
+    MiscHooked=false, MiscOrig=nil,
+    LogLines={},
 }
 
---// ============================================================
---// UTILITIES
---// ============================================================
-local ConsoleLines -- forward declare, set after GUI built
+pcall(function() S.DefaultGravity = workspace.Gravity end)
+
+-- ================================================================
+-- UTILS
+-- ================================================================
+local LogFn -- forward declare, replaced after GUI built
 
 local function Log(msg)
-    table.insert(State.Logs or {}, 1, string.format("[%.1fs] %s", os.clock(), msg))
-end
-State.Logs = {}
-
-local function Tween(obj, info, props)
-    TweenService:Create(obj, info, props):Play()
+    table.insert(S.LogLines, 1, tostring(msg))
+    if #S.LogLines > 50 then table.remove(S.LogLines) end
+    if LogFn then pcall(LogFn, msg) end
 end
 
-local function Corner(p, r) local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r or 4); c.Parent=p; return c end
-local function Stroke(p, col, th) local s=Instance.new("UIStroke"); s.Color=col or CFG.Border; s.Thickness=th or 1; s.Parent=p; return s end
+local function Tw(obj, ti, props) pcall(function() TweenService:Create(obj,ti,props):Play() end) end
+
+local function Crn(p,r) local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r or 4); c.Parent=p; return c end
+local function Str(p,col,th) local s=Instance.new("UIStroke"); s.Color=col or CFG.Border; s.Thickness=th or 1; s.Parent=p; return s end
 local function Pad(p,t,r,b,l) local u=Instance.new("UIPadding"); u.PaddingTop=UDim.new(0,t or 0); u.PaddingRight=UDim.new(0,r or 0); u.PaddingBottom=UDim.new(0,b or 0); u.PaddingLeft=UDim.new(0,l or 0); u.Parent=p end
 
-local function Lbl(parent, text, size, color, xa)
-    local l = Instance.new("TextLabel")
-    l.BackgroundTransparency = 1
-    l.Text           = text
-    l.TextColor3     = color or CFG.TextPrimary
-    l.TextSize       = size or 13
-    l.Font           = PF
-    l.TextXAlignment = xa or Enum.TextXAlignment.Left
-    l.TextTruncate   = Enum.TextTruncate.AtEnd
-    l.Parent         = parent
-    return l
+local function MkLbl(par,txt,sz,col,xa)
+    local l=Instance.new("TextLabel"); l.BackgroundTransparency=1; l.Text=tostring(txt)
+    l.TextColor3=col or CFG.TextPri; l.TextSize=sz or 13; l.Font=PF
+    l.TextXAlignment=xa or Enum.TextXAlignment.Left; l.TextTruncate=Enum.TextTruncate.AtEnd
+    l.Parent=par; return l
 end
 
-local function Btn(parent, text, bg, size, pos)
-    local b = Instance.new("TextButton")
-    b.Size             = size or UDim2.new(1,0,0,30)
-    b.Position         = pos  or UDim2.new(0,0,0,0)
-    b.BackgroundColor3 = bg   or CFG.Surface
-    b.TextColor3       = Color3.new(1,1,1)
-    b.Text             = text
-    b.TextSize         = 12
-    b.Font             = PF
-    b.BorderSizePixel  = 0
-    b.AutoButtonColor  = false
-    b.Parent           = parent
-    Corner(b, 2)
-    Stroke(b, CFG.Border, 1)
-    return b
+local function MkBtn(par,txt,bg,sz,pos)
+    local b=Instance.new("TextButton"); b.Size=sz or UDim2.new(1,0,0,30); b.Position=pos or UDim2.new(0,0,0,0)
+    b.BackgroundColor3=bg or CFG.Surface; b.TextColor3=Color3.new(1,1,1); b.Text=tostring(txt)
+    b.TextSize=12; b.Font=PF; b.BorderSizePixel=0; b.AutoButtonColor=false; b.Parent=par
+    Crn(b,2); Str(b,CFG.Border,1); return b
 end
 
---// ============================================================
---// HIGHLIGHT ENGINE
---// ============================================================
-local function ApplyHighlight(player, color, tr, fill, outline)
+-- ================================================================
+-- HIGHLIGHT ENGINE
+-- ================================================================
+local function ApplyHL(player,color,tr,fill,outline)
     if not player or not player.Character then return end
-    local ex = State.Highlights[player]
-    if ex then ex:Destroy() end
-    local hl = Instance.new("Highlight")
-    hl.FillColor           = color or State.HLColor
-    hl.OutlineColor        = color or State.HLColor
-    hl.FillTransparency    = (not fill or outline) and 1 or (tr or State.HLTransparency)
-    hl.OutlineTransparency = 0
-    hl.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
-    hl.Adornee             = player.Character
-    hl.Parent              = player.Character
-    State.Highlights[player] = hl
-    player.CharacterAdded:Connect(function(char)
-        task.wait(0.1)
-        if State.Highlights[player] then
-            local h2 = Instance.new("Highlight")
-            h2.FillColor=hl.FillColor; h2.OutlineColor=hl.OutlineColor
-            h2.FillTransparency=hl.FillTransparency; h2.OutlineTransparency=0
-            h2.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
-            h2.Adornee=char; h2.Parent=char
-            State.Highlights[player] = h2
-        end
-    end)
-    Log("HL ON: "..player.Name)
-end
-
-local function RemoveHighlight(player)
-    local hl = State.Highlights[player]
-    if hl then hl:Destroy(); State.Highlights[player]=nil; Log("HL OFF: "..player.Name) end
-end
-
-local function HighlightAll()
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then ApplyHighlight(p,State.HLColor,State.HLTransparency,State.HLFill,State.HLOutline) end
-    end; Log("ALL HL")
-end
-
-local function ClearAllHL()
-    for p in pairs(State.Highlights) do RemoveHighlight(p) end; Log("HL CLEARED")
-end
-
---// Box ESP
-local function StartBoxESP()
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            local lines={}
-            for i=1,4 do
-                local l=Drawing.new("Line"); l.Thickness=1.5; l.Color=State.HLColor; l.Visible=false; l.ZIndex=5
-                table.insert(lines,l)
+    local ex=S.Highlights[player]; if ex then pcall(function() ex:Destroy() end) end
+    pcall(function()
+        local h=Instance.new("Highlight")
+        h.FillColor=color or S.HLColor; h.OutlineColor=color or S.HLColor
+        h.FillTransparency=(not fill or outline) and 1 or (tr or S.HLTrans)
+        h.OutlineTransparency=0; h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+        h.Adornee=player.Character; h.Parent=player.Character
+        S.Highlights[player]=h
+        player.CharacterAdded:Connect(function(char)
+            task.wait(0.1)
+            if S.Highlights[player] then
+                pcall(function()
+                    local h2=Instance.new("Highlight")
+                    h2.FillColor=h.FillColor; h2.OutlineColor=h.OutlineColor
+                    h2.FillTransparency=h.FillTransparency; h2.OutlineTransparency=0
+                    h2.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+                    h2.Adornee=char; h2.Parent=char; S.Highlights[player]=h2
+                end)
             end
-            State.BoxLines[p]=lines
-        end
-    end
-    State.BoxConn = RunService.RenderStepped:Connect(function()
-        local cam=workspace.CurrentCamera
-        for player,lines in pairs(State.BoxLines) do
-            local char=player.Character
-            local root=char and char:FindFirstChild("HumanoidRootPart")
-            local hum=char and char:FindFirstChildOfClass("Humanoid")
-            if not root or not hum or hum.Health<=0 then for _,l in ipairs(lines) do l.Visible=false end; continue end
-            local cf=root.CFrame; local w=2.2; local h=5.5
-            local c3={cf*Vector3.new(-w,-h/2,0),cf*Vector3.new(w,-h/2,0),cf*Vector3.new(w,h,0),cf*Vector3.new(-w,h,0)}
-            local pts={}; local ok=true
-            for _,c in ipairs(c3) do local v,on=cam:WorldToViewportPoint(c); if not on then ok=false end; table.insert(pts,Vector2.new(v.X,v.Y)) end
-            if ok then
-                lines[1].From=pts[1];lines[1].To=pts[2];lines[1].Visible=true;lines[1].Color=State.HLColor
-                lines[2].From=pts[2];lines[2].To=pts[3];lines[2].Visible=true;lines[2].Color=State.HLColor
-                lines[3].From=pts[3];lines[3].To=pts[4];lines[3].Visible=true;lines[3].Color=State.HLColor
-                lines[4].From=pts[4];lines[4].To=pts[1];lines[4].Visible=true;lines[4].Color=State.HLColor
-            else for _,l in ipairs(lines) do l.Visible=false end end
-        end
+        end)
     end)
-    Log("BOX ESP ON")
+    Log("HL: "..player.Name)
 end
 
-local function StopBoxESP()
-    if State.BoxConn then State.BoxConn:Disconnect(); State.BoxConn=nil end
-    for _,lines in pairs(State.BoxLines) do for _,l in ipairs(lines) do pcall(function()l.Visible=false;l:Remove()end) end end
-    State.BoxLines={}; Log("BOX ESP OFF")
+local function RemHL(player)
+    local h=S.Highlights[player]
+    if h then pcall(function() h:Destroy() end); S.Highlights[player]=nil end
 end
 
---// Tracers
-local function StartTracers()
+local function HLAll()
     for _,p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            local l=Drawing.new("Line"); l.Thickness=1; l.Color=State.HLColor; l.Visible=false; l.ZIndex=4
-            State.TracerLines[p]=l
-        end
+        if p~=LocalPlayer then ApplyHL(p,S.HLColor,S.HLTrans,S.HLFill,S.HLOutline) end
     end
-    State.TracerConn = RunService.RenderStepped:Connect(function()
-        local cam=workspace.CurrentCamera
-        local vp=cam.ViewportSize
-        local origin=Vector2.new(vp.X/2,vp.Y)
-        for player,line in pairs(State.TracerLines) do
-            local char=player.Character
-            local root=char and char:FindFirstChild("HumanoidRootPart")
-            local hum=char and char:FindFirstChildOfClass("Humanoid")
-            if not root or not hum or hum.Health<=0 then line.Visible=false; continue end
-            local v,on=cam:WorldToViewportPoint(root.Position)
-            if on then line.From=origin; line.To=Vector2.new(v.X,v.Y); line.Color=State.HLColor; line.Visible=true
-            else line.Visible=false end
+end
+
+local function ClearHL()
+    for p in pairs(S.Highlights) do RemHL(p) end
+end
+
+-- Box ESP -- Drawing only inside this function, never at top level
+local function StartBox()
+    pcall(function()
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p~=LocalPlayer then
+                local ln={}
+                for i=1,4 do
+                    local l=Drawing.new("Line"); l.Thickness=1.5; l.Color=S.HLColor; l.Visible=false; l.ZIndex=5
+                    ln[i]=l
+                end
+                S.BoxLines[p]=ln
+            end
         end
     end)
-    Log("TRACERS ON")
+    S.BoxConn=RunService.RenderStepped:Connect(function()
+        local cam=workspace.CurrentCamera
+        for pl,ln in pairs(S.BoxLines) do
+            pcall(function()
+                local ch=pl.Character
+                local rt=ch and ch:FindFirstChild("HumanoidRootPart")
+                local hm=ch and ch:FindFirstChildOfClass("Humanoid")
+                if not rt or not hm or hm.Health<=0 then
+                    for i=1,4 do ln[i].Visible=false end; return
+                end
+                local cf=rt.CFrame; local w,h=2.2,5.5
+                local c3={cf*Vector3.new(-w,-h/2,0),cf*Vector3.new(w,-h/2,0),cf*Vector3.new(w,h,0),cf*Vector3.new(-w,h,0)}
+                local pts={}; local ok=true
+                for _,c in ipairs(c3) do local v,on=cam:WorldToViewportPoint(c); if not on then ok=false end; table.insert(pts,Vector2.new(v.X,v.Y)) end
+                if ok then
+                    for i=1,4 do ln[i].From=pts[i]; ln[i].To=pts[i%4+1]; ln[i].Color=S.HLColor; ln[i].Visible=true end
+                else
+                    for i=1,4 do ln[i].Visible=false end
+                end
+            end)
+        end
+    end)
+end
+
+local function StopBox()
+    if S.BoxConn then S.BoxConn:Disconnect(); S.BoxConn=nil end
+    for _,ln in pairs(S.BoxLines) do for _,l in ipairs(ln) do pcall(function() l.Visible=false; l:Remove() end) end end
+    S.BoxLines={}
+end
+
+-- Tracers -- same, Drawing only inside function
+local function StartTracers()
+    pcall(function()
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p~=LocalPlayer then
+                local l=Drawing.new("Line"); l.Thickness=1; l.Color=S.HLColor; l.Visible=false; l.ZIndex=4
+                S.TracerLines[p]=l
+            end
+        end
+    end)
+    S.TracerConn=RunService.RenderStepped:Connect(function()
+        local cam=workspace.CurrentCamera
+        local vp=cam.ViewportSize; local org=Vector2.new(vp.X/2,vp.Y)
+        for pl,l in pairs(S.TracerLines) do
+            pcall(function()
+                local ch=pl.Character; local rt=ch and ch:FindFirstChild("HumanoidRootPart")
+                local hm=ch and ch:FindFirstChildOfClass("Humanoid")
+                if not rt or not hm or hm.Health<=0 then l.Visible=false; return end
+                local v,on=cam:WorldToViewportPoint(rt.Position)
+                if on then l.From=org; l.To=Vector2.new(v.X,v.Y); l.Color=S.HLColor; l.Visible=true
+                else l.Visible=false end
+            end)
+        end
+    end)
 end
 
 local function StopTracers()
-    if State.TracerConn then State.TracerConn:Disconnect(); State.TracerConn=nil end
-    for _,l in pairs(State.TracerLines) do pcall(function()l.Visible=false;l:Remove()end) end
-    State.TracerLines={}; Log("TRACERS OFF")
+    if S.TracerConn then S.TracerConn:Disconnect(); S.TracerConn=nil end
+    for _,l in pairs(S.TracerLines) do pcall(function() l.Visible=false; l:Remove() end) end
+    S.TracerLines={}
 end
 
 Players.PlayerAdded:Connect(function(p)
-    if State.HLBox then
-        local lines={}
-        for i=1,4 do local l=Drawing.new("Line");l.Thickness=1.5;l.Color=State.HLColor;l.Visible=false;l.ZIndex=5; table.insert(lines,l) end
-        State.BoxLines[p]=lines
-    end
-    if State.HLTracers then
-        local l=Drawing.new("Line");l.Thickness=1;l.Color=State.HLColor;l.Visible=false;l.ZIndex=4
-        State.TracerLines[p]=l
-    end
-end)
-Players.PlayerRemoving:Connect(function(p)
-    RemoveHighlight(p)
-    if State.BoxLines[p] then for _,l in ipairs(State.BoxLines[p]) do pcall(function()l.Visible=false;l:Remove()end) end; State.BoxLines[p]=nil end
-    if State.TracerLines[p] then pcall(function()State.TracerLines[p].Visible=false;State.TracerLines[p]:Remove()end); State.TracerLines[p]=nil end
+    if S.HLBox then pcall(function()
+        local ln={}; for i=1,4 do local l=Drawing.new("Line"); l.Thickness=1.5; l.Color=S.HLColor; l.Visible=false; l.ZIndex=5; ln[i]=l end; S.BoxLines[p]=ln
+    end) end
+    if S.HLTracers then pcall(function()
+        local l=Drawing.new("Line"); l.Thickness=1; l.Color=S.HLColor; l.Visible=false; l.ZIndex=4; S.TracerLines[p]=l
+    end) end
 end)
 
---// ============================================================
---// FLY ENGINE
---// ============================================================
+Players.PlayerRemoving:Connect(function(p)
+    RemHL(p)
+    if S.BoxLines[p] then for _,l in ipairs(S.BoxLines[p]) do pcall(function() l.Visible=false; l:Remove() end) end; S.BoxLines[p]=nil end
+    if S.TracerLines[p] then pcall(function() S.TracerLines[p].Visible=false; S.TracerLines[p]:Remove() end); S.TracerLines[p]=nil end
+end)
+
+-- ================================================================
+-- FLY ENGINE
+-- ================================================================
 local function StartFly()
     local char=LocalPlayer.Character; if not char then return end
     local hrp=char:FindFirstChild("HumanoidRootPart")
     local hum=char:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return end
     hum.PlatformStand=false
-    State.FlyStateConn = hum.StateChanged:Connect(function(_,new)
-        if State.Flying and new~=Enum.HumanoidStateType.Running then
+    S.FlyStateConn=hum.StateChanged:Connect(function(_,new)
+        if S.Flying and new~=Enum.HumanoidStateType.Running then
             pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
         end
     end)
     local lastCF=hrp.CFrame
-    State.FlyConn = RunService.Heartbeat:Connect(function(dt)
+    S.FlyConn=RunService.Heartbeat:Connect(function(dt)
         local cam=workspace.CurrentCamera
         if not cam or not hrp or not hrp.Parent then return end
         local dir=Vector3.zero
@@ -314,206 +245,221 @@ local function StartFly()
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir=dir+cam.CFrame.RightVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.Space)       then dir=dir+Vector3.new(0,1,0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir=dir-Vector3.new(0,1,0) end
-        local tp=lastCF.Position+(dir.Magnitude>0 and dir.Unit*State.FlySpeed*dt or Vector3.zero)
+        local tp=lastCF.Position+(dir.Magnitude>0 and dir.Unit*S.FlySpeed*dt or Vector3.zero)
         local ld=Vector3.new(cam.CFrame.LookVector.X,0,cam.CFrame.LookVector.Z)
-        local newCF=ld.Magnitude>0.01 and CFrame.new(tp,tp+ld) or CFrame.new(tp)*(lastCF-lastCF.Position)
-        hrp.CFrame=newCF; lastCF=newCF
-        hrp.AssemblyLinearVelocity=Vector3.zero; hrp.AssemblyAngularVelocity=Vector3.zero
+        local newCF=ld.Magnitude>0.01 and CFrame.new(tp,tp+ld) or CFrame.new(tp)
+        pcall(function()
+            hrp.CFrame=newCF; lastCF=newCF
+            hrp.AssemblyLinearVelocity=Vector3.zero; hrp.AssemblyAngularVelocity=Vector3.zero
+        end)
     end)
-    State.Flying=true; Log("FLY ON")
+    S.Flying=true; Log("FLY ON")
 end
 
 local function StopFly()
-    if State.FlyConn      then State.FlyConn:Disconnect();      State.FlyConn=nil end
-    if State.FlyStateConn then State.FlyStateConn:Disconnect(); State.FlyStateConn=nil end
+    if S.FlyConn      then S.FlyConn:Disconnect();      S.FlyConn=nil end
+    if S.FlyStateConn then S.FlyStateConn:Disconnect(); S.FlyStateConn=nil end
     local char=LocalPlayer.Character
-    if char then
+    if char then pcall(function()
         local hum=char:FindFirstChildOfClass("Humanoid")
         local hrp=char:FindFirstChild("HumanoidRootPart")
-        if hum then hum.PlatformStand=false; pcall(function()hum:ChangeState(Enum.HumanoidStateType.Running)end) end
+        if hum then hum.PlatformStand=false; hum:ChangeState(Enum.HumanoidStateType.Running) end
         if hrp then hrp.AssemblyLinearVelocity=Vector3.zero; hrp.AssemblyAngularVelocity=Vector3.zero end
-    end
-    State.Flying=false; Log("FLY OFF")
+    end) end
+    S.Flying=false; Log("FLY OFF")
 end
 
---// ============================================================
---// NOCLIP ENGINE
---// ============================================================
+-- ================================================================
+-- NOCLIP ENGINE
+-- ================================================================
 local function StartNoclip()
-    State.NoclipConn=RunService.Stepped:Connect(function()
+    S.NoclipConn=RunService.Stepped:Connect(function()
         local char=LocalPlayer.Character; if not char then return end
-        for _,p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end
+        for _,p in ipairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide=false end
+        end
     end)
-    State.Noclip=true; Log("NOCLIP ON")
+    S.Noclip=true; Log("NOCLIP ON")
 end
 
 local function StopNoclip()
-    if State.NoclipConn then State.NoclipConn:Disconnect(); State.NoclipConn=nil end
+    if S.NoclipConn then S.NoclipConn:Disconnect(); S.NoclipConn=nil end
     local char=LocalPlayer.Character
     if char then for _,p in ipairs(char:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=true end end end
-    State.Noclip=false; Log("NOCLIP OFF")
+    S.Noclip=false; Log("NOCLIP OFF")
 end
 
---// ============================================================
---// SPEED ENGINE
---// ============================================================
+-- ================================================================
+-- SPEED ENGINE
+-- ================================================================
 local function ApplySpeed()
     local char=LocalPlayer.Character; if not char then return end
     local hum=char:FindFirstChildOfClass("Humanoid")
     local hrp=char:FindFirstChild("HumanoidRootPart")
     if not hum or not hrp then return end
-    if State.SpeedActive then
-        hum.WalkSpeed=16; hum.JumpPower=State.JumpPower
+    if S.SpeedActive then
+        hum.WalkSpeed=16; hum.JumpPower=S.JumpPower
         local ex=hrp:FindFirstChild("_ZS"); if ex then ex:Destroy() end
         local bv=Instance.new("BodyVelocity")
         bv.Name="_ZS"; bv.MaxForce=Vector3.new(1e4,0,1e4); bv.Velocity=Vector3.zero; bv.Parent=hrp
-        if State.SpeedConn then State.SpeedConn:Disconnect() end
-        State.SpeedConn=RunService.Heartbeat:Connect(function()
-            if not State.SpeedActive then return end
+        if S.SpeedConn then S.SpeedConn:Disconnect() end
+        S.SpeedConn=RunService.Heartbeat:Connect(function()
+            if not S.SpeedActive then return end
             local c2=LocalPlayer.Character; if not c2 then return end
             local h2=c2:FindFirstChildOfClass("Humanoid")
             local r2=c2:FindFirstChild("HumanoidRootPart")
             local b2=r2 and r2:FindFirstChild("_ZS")
             if not h2 or not r2 or not b2 then return end
             local md=h2.MoveDirection
-            b2.Velocity=md.Magnitude>0 and md*(State.WalkSpeed-16) or Vector3.zero
+            b2.Velocity=md.Magnitude>0 and md*(S.WalkSpeed-16) or Vector3.zero
             h2.WalkSpeed=16
         end)
     else
-        if State.SpeedConn then State.SpeedConn:Disconnect(); State.SpeedConn=nil end
+        if S.SpeedConn then S.SpeedConn:Disconnect(); S.SpeedConn=nil end
         local ex=hrp:FindFirstChild("_ZS"); if ex then ex:Destroy() end
         hum.WalkSpeed=16; hum.JumpPower=50
     end
 end
 
---// ============================================================
---// AIMBOT ENGINE
---// ============================================================
-local function AimbotGetClosest(fovRadius)
+-- ================================================================
+-- AIMBOT ENGINE
+-- ================================================================
+local function AimbotFind()
     local cam=workspace.CurrentCamera
     local mp=UserInputService:GetMouseLocation()
-    local best,bestDist=nil,fovRadius
+    local cfg=S.AimbotCfg
+    local best,bd=nil,cfg.FOVAmount
     for _,p in ipairs(Players:GetPlayers()) do
-        if p==LocalPlayer then continue end
-        local char=p.Character; if not char then continue end
-        local part=char:FindFirstChild(State.AimbotSettings.LockPart) or char:FindFirstChild("HumanoidRootPart")
-        local hum=char:FindFirstChildOfClass("Humanoid")
-        if not part or not hum then continue end
-        if State.AimbotSettings.AliveCheck and hum.Health<=0 then continue end
-        if State.AimbotSettings.TeamCheck  and p.Team==LocalPlayer.Team then continue end
-        local v,on=cam:WorldToViewportPoint(part.Position)
-        if not on then continue end
-        local d=(Vector2.new(mp.X,mp.Y)-Vector2.new(v.X,v.Y)).Magnitude
-        if d<bestDist then bestDist=d; best=p end
+        if p~=LocalPlayer then
+            local ch=p.Character
+            if ch then
+                local pt=ch:FindFirstChild(cfg.LockPart) or ch:FindFirstChild("HumanoidRootPart")
+                local hm=ch:FindFirstChildOfClass("Humanoid")
+                local skip=false
+                if not pt or not hm then skip=true end
+                if not skip and cfg.AliveCheck and hm.Health<=0 then skip=true end
+                if not skip and cfg.TeamCheck and p.Team==LocalPlayer.Team then skip=true end
+                if not skip then
+                    local v,on=cam:WorldToViewportPoint(pt.Position)
+                    if on then
+                        local d=(Vector2.new(mp.X,mp.Y)-Vector2.new(v.X,v.Y)).Magnitude
+                        if d<bd then bd=d; best=p end
+                    end
+                end
+            end
+        end
     end
     return best
 end
 
 local function StartAimbot()
-    if State.AimbotConns.render then return end
-    local ss=State.AimbotSettings
-    local fov=State.AimbotFOVCircle
+    local cfg=S.AimbotCfg
     local running=false
     local locked=nil
 
-    State.AimbotConns.typing1=UserInputService.TextBoxFocused:Connect(function() State.AimbotTyping=true end)
-    State.AimbotConns.typing2=UserInputService.TextBoxFocusReleased:Connect(function() State.AimbotTyping=false end)
+    S.AimbotConns.t1=UserInputService.TextBoxFocused:Connect(function() S.AimbotTyping=true end)
+    S.AimbotConns.t2=UserInputService.TextBoxFocusReleased:Connect(function() S.AimbotTyping=false end)
 
-    State.AimbotConns.render=RunService.RenderStepped:Connect(function()
+    S.AimbotConns.render=RunService.RenderStepped:Connect(function()
         local cam=workspace.CurrentCamera
-        -- FOV circle
-        if fov then
-            if ss.FOVVisible and State.AimbotOn then
-                fov.Radius=ss.FOVAmount; fov.Thickness=1; fov.NumSides=60; fov.Filled=false
-                fov.Color=locked and Color3.fromRGB(255,70,70) or CFG.Accent
-                fov.Transparency=0.5; fov.Visible=true
-                local mp=UserInputService:GetMouseLocation()
-                fov.Position=Vector2.new(mp.X,mp.Y)
-            else fov.Visible=false end
-        end
-
-        if not running or not State.AimbotOn then return end
-
-        if not locked then
-            locked=AimbotGetClosest(ss.FOVAmount)
-            State.AimbotLocked=locked
-        else
-            local char=locked.Character
-            local part=char and (char:FindFirstChild(ss.LockPart) or char:FindFirstChild("HumanoidRootPart"))
-            if not char or not part then locked=nil; State.AimbotLocked=nil; return end
-            local hum=char:FindFirstChildOfClass("Humanoid")
-            if ss.AliveCheck and hum and hum.Health<=0 then locked=nil; State.AimbotLocked=nil; return end
-
-            if ss.Sensitivity>0 then
-                TweenService:Create(cam,TweenInfo.new(ss.Sensitivity,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),
-                    {CFrame=CFrame.new(cam.CFrame.Position,part.Position)}):Play()
-            else
-                cam.CFrame=CFrame.new(cam.CFrame.Position,part.Position)
+        pcall(function()
+            local fov=S.AimbotFOV
+            if fov then
+                if cfg.FOVVisible and S.AimbotOn then
+                    fov.Radius=cfg.FOVAmount; fov.Thickness=1; fov.NumSides=60; fov.Filled=false
+                    fov.Transparency=0.5; fov.Visible=true
+                    fov.Color=locked and Color3.fromRGB(255,70,70) or CFG.Accent
+                    local mp=UserInputService:GetMouseLocation()
+                    fov.Position=Vector2.new(mp.X,mp.Y)
+                else fov.Visible=false end
             end
+        end)
+        if not running or not S.AimbotOn then return end
+        if not locked then
+            locked=AimbotFind(); S.AimbotLocked=locked
+        else
+            local ch=locked.Character
+            local pt=ch and (ch:FindFirstChild(cfg.LockPart) or ch:FindFirstChild("HumanoidRootPart"))
+            if not ch or not pt then locked=nil; S.AimbotLocked=nil; return end
+            local hm=ch:FindFirstChildOfClass("Humanoid")
+            if cfg.AliveCheck and hm and hm.Health<=0 then locked=nil; S.AimbotLocked=nil; return end
+            pcall(function()
+                if cfg.Sensitivity>0 then
+                    TweenService:Create(cam,TweenInfo.new(cfg.Sensitivity,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),
+                        {CFrame=CFrame.new(cam.CFrame.Position,pt.Position)}):Play()
+                else
+                    cam.CFrame=CFrame.new(cam.CFrame.Position,pt.Position)
+                end
+            end)
         end
     end)
 
-    State.AimbotConns.begun=UserInputService.InputBegan:Connect(function(inp)
-        if State.AimbotTyping or not State.AimbotOn then return end
-        local rmb=inp.UserInputType==Enum.UserInputType.MouseButton2
-        if rmb then
-            if ss.Toggle then running=not running; if not running then locked=nil; State.AimbotLocked=nil end
+    S.AimbotConns.began=UserInputService.InputBegan:Connect(function(inp)
+        if S.AimbotTyping or not S.AimbotOn then return end
+        if inp.UserInputType==Enum.UserInputType.MouseButton2 then
+            if cfg.Toggle then running=not running; if not running then locked=nil; S.AimbotLocked=nil end
             else running=true end
         end
     end)
-    State.AimbotConns.ended=UserInputService.InputEnded:Connect(function(inp)
-        if State.AimbotTyping or ss.Toggle then return end
+
+    S.AimbotConns.ended=UserInputService.InputEnded:Connect(function(inp)
+        if S.AimbotTyping or cfg.Toggle then return end
         if inp.UserInputType==Enum.UserInputType.MouseButton2 then
-            running=false; locked=nil; State.AimbotLocked=nil
+            running=false; locked=nil; S.AimbotLocked=nil
         end
     end)
-    Log("AIMBOT ON | HOLD RMB")
+    Log("AIMBOT ON")
 end
 
 local function StopAimbot()
-    for _,c in pairs(State.AimbotConns) do c:Disconnect() end
-    State.AimbotConns={}
-    if State.AimbotFOVCircle then State.AimbotFOVCircle.Visible=false end
-    State.AimbotLocked=nil; Log("AIMBOT OFF")
+    for _,c in pairs(S.AimbotConns) do pcall(function() c:Disconnect() end) end
+    S.AimbotConns={}
+    pcall(function() if S.AimbotFOV then S.AimbotFOV.Visible=false end end)
+    S.AimbotLocked=nil; Log("AIMBOT OFF")
 end
 
---// ============================================================
---// SILENT AIM ENGINE
---// ============================================================
-local function SilentGetTarget()
+-- ================================================================
+-- SILENT AIM ENGINE
+-- ================================================================
+local function SilentFind()
     local cam=workspace.CurrentCamera
     local mp=UserInputService:GetMouseLocation()
-    local ss=State.SilentSettings
-    local best,bestDist=nil,ss.FOVRadius
+    local cfg=S.SilentCfg
+    local best,bd=nil,cfg.FOVRadius
     for _,p in ipairs(Players:GetPlayers()) do
-        if p==LocalPlayer then continue end
-        local char=p.Character; if not char then continue end
-        local part=char:FindFirstChild(ss.LockPart) or char:FindFirstChild("HumanoidRootPart")
-        local hum=char:FindFirstChildOfClass("Humanoid")
-        if not part or not hum then continue end
-        if ss.AliveCheck and hum.Health<=0 then continue end
-        if ss.TeamCheck  and p.Team==LocalPlayer.Team then continue end
-        local v,on=cam:WorldToViewportPoint(part.Position)
-        if not on then continue end
-        local d=(Vector2.new(mp.X,mp.Y)-Vector2.new(v.X,v.Y)).Magnitude
-        if (not ss.CheckFOV or d<bestDist) then bestDist=d; best=part end
+        if p~=LocalPlayer then
+            local ch=p.Character
+            if ch then
+                local pt=ch:FindFirstChild(cfg.LockPart) or ch:FindFirstChild("HumanoidRootPart")
+                local hm=ch:FindFirstChildOfClass("Humanoid")
+                local skip=false
+                if not pt or not hm then skip=true end
+                if not skip and cfg.AliveCheck and hm.Health<=0 then skip=true end
+                if not skip and cfg.TeamCheck and p.Team==LocalPlayer.Team then skip=true end
+                if not skip then
+                    local v,on=cam:WorldToViewportPoint(pt.Position)
+                    if on then
+                        local d=(Vector2.new(mp.X,mp.Y)-Vector2.new(v.X,v.Y)).Magnitude
+                        if (not cfg.CheckFOV or d<bd) then bd=d; best=pt end
+                    end
+                end
+            end
+        end
     end
     return best
 end
 
 local function StartSilentAim()
-    if State.SilentHooked then return end
+    if S.SilentHooked then return end
     local ok,mt=pcall(getrawmetatable,game)
     if not ok then Log("SA: NO GETRAWMETATABLE"); return end
-    local oldNC=mt.__namecall
-    State.SilentOriginal=oldNC
-    local ok2=pcall(setreadonly,mt,false)
-    if not ok2 then Log("SA: NO SETREADONLY"); return end
+    local oldNC=mt.__namecall; S.SilentOrig=oldNC
+    if not pcall(setreadonly,mt,false) then Log("SA: NO SETREADONLY"); return end
     mt.__namecall=newcclosure(function(self,...)
         local method=getnamecallmethod()
-        if State.SilentOn then
+        if S.SilentOn then
             if method=="Raycast" and self==workspace then
-                local target=SilentGetTarget()
+                local target=SilentFind()
                 if target then
                     local args={...}
                     if typeof(args[1])=="Vector3" then
@@ -522,7 +468,7 @@ local function StartSilentAim()
                     end
                 end
             elseif (method=="FindPartOnRayWithWhitelist" or method=="FindPartOnRay") and self==workspace then
-                local target=SilentGetTarget()
+                local target=SilentFind()
                 if target then
                     local args={...}
                     if typeof(args[1])=="Ray" then
@@ -534,724 +480,482 @@ local function StartSilentAim()
         end
         return oldNC(self,...)
     end)
-    setreadonly(mt,true)
-    State.SilentHooked=true; Log("SILENT AIM ON")
+    pcall(setreadonly,mt,true)
+    S.SilentHooked=true; Log("SILENT AIM ON")
 end
 
 local function StopSilentAim()
-    if not State.SilentHooked then return end
+    if not S.SilentHooked then return end
     local ok,mt=pcall(getrawmetatable,game)
     if ok then
-        pcall(setreadonly,mt,false)
-        mt.__namecall=State.SilentOriginal
-        pcall(setreadonly,mt,true)
+        pcall(setreadonly,mt,false); mt.__namecall=S.SilentOrig; pcall(setreadonly,mt,true)
     end
-    State.SilentHooked=false; State.SilentOriginal=nil; Log("SILENT AIM OFF")
+    S.SilentHooked=false; S.SilentOrig=nil; Log("SILENT AIM OFF")
 end
 
---// ============================================================
---// TRIGGERBOT ENGINE
---// ============================================================
+-- ================================================================
+-- TRIGGERBOT ENGINE
+-- ================================================================
 local function StartTriggerbot()
-    State.TriggerConn=RunService.Heartbeat:Connect(function()
-        if not State.TriggerOn then return end
-        local cam=workspace.CurrentCamera
-        local mp=UserInputService:GetMouseLocation()
-        local unitRay=cam:ScreenPointToRay(mp.X,mp.Y)
-        local rp=RaycastParams.new()
-        rp.FilterType=Enum.RaycastFilterType.Exclude
-        rp.FilterDescendantsInstances={LocalPlayer.Character or game}
-        local result=workspace:Raycast(unitRay.Origin,unitRay.Direction*1000,rp)
-        if result and result.Instance then
-            local hit=result.Instance
-            -- check if part belongs to an enemy player
-            for _,p in ipairs(Players:GetPlayers()) do
-                if p==LocalPlayer then continue end
-                if p.Character and hit:IsDescendantOf(p.Character) then
-                    local hum=p.Character:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.Health>0 then
-                        task.wait(State.TriggerDelay)
-                        -- simulate mouse click
-                        if mouse1press then
-                            pcall(mouse1press)
+    S.TriggerConn=RunService.Heartbeat:Connect(function()
+        if not S.TriggerOn then return end
+        pcall(function()
+            local cam=workspace.CurrentCamera
+            local mp=UserInputService:GetMouseLocation()
+            local ray=cam:ScreenPointToRay(mp.X,mp.Y)
+            local rp=RaycastParams.new()
+            rp.FilterType=Enum.RaycastFilterType.Exclude
+            rp.FilterDescendantsInstances={LocalPlayer.Character or workspace}
+            local res=workspace:Raycast(ray.Origin,ray.Direction*1000,rp)
+            if res and res.Instance then
+                for _,p in ipairs(Players:GetPlayers()) do
+                    if p~=LocalPlayer and p.Character and res.Instance:IsDescendantOf(p.Character) then
+                        local hm=p.Character:FindFirstChildOfClass("Humanoid")
+                        if hm and hm.Health>0 then
+                            task.wait(S.TriggerDelay)
+                            if mouse1press  then pcall(mouse1press)  end
                             task.wait(0.05)
-                            pcall(mouse1release)
-                        else
-                            -- fallback: use InputService simulation
-                            local vInputService = game:GetService("VirtualInputManager")
-                            pcall(function()
-                                vInputService:SendMouseButtonEvent(0,0,0,true,game,0)
-                                task.wait(0.05)
-                                vInputService:SendMouseButtonEvent(0,0,0,false,game,0)
-                            end)
+                            if mouse1release then pcall(mouse1release) end
                         end
                     end
                 end
             end
-        end
+        end)
     end)
     Log("TRIGGERBOT ON")
 end
 
 local function StopTriggerbot()
-    if State.TriggerConn then State.TriggerConn:Disconnect(); State.TriggerConn=nil end
+    if S.TriggerConn then S.TriggerConn:Disconnect(); S.TriggerConn=nil end
     Log("TRIGGERBOT OFF")
 end
 
---// ============================================================
---// MISC ENGINE (No Spread, No Recoil, Rapid Fire, Wallbang)
---// ============================================================
-local function StartMiscHook()
-    if State.MiscHooked then return end
-    local ok,mt=pcall(getrawmetatable,game)
-    if not ok then Log("MISC HOOK: NO GETRAWMETATABLE"); return end
-    local oldNC=mt.__namecall
-    State.MiscOriginal=oldNC
-    local ok2=pcall(setreadonly,mt,false)
-    if not ok2 then Log("MISC HOOK: NO SETREADONLY"); return end
-
-    mt.__namecall=newcclosure(function(self,...)
-        local method=getnamecallmethod()
-
-        if method=="Raycast" and self==workspace then
-            local args={...}
-            -- No Spread: zero out any random offset in direction
-            if State.NoSpread and typeof(args[2])=="Vector3" then
-                args[2]=args[2].Unit*(args[2].Magnitude)
+-- ================================================================
+-- MISC HOOK ENGINE
+-- ================================================================
+local function RefreshMisc()
+    local need=S.NoSpread or S.NoRecoil or S.RapidFire or S.Wallbang
+    if need and not S.MiscHooked then
+        local ok,mt=pcall(getrawmetatable,game)
+        if not ok then Log("MISC: NO GETRAWMETATABLE"); return end
+        local oldNC=mt.__namecall; S.MiscOrig=oldNC
+        if not pcall(setreadonly,mt,false) then Log("MISC: NO SETREADONLY"); return end
+        mt.__namecall=newcclosure(function(self,...)
+            local method=getnamecallmethod()
+            if method=="Raycast" and self==workspace then
+                local args={...}
+                if S.NoSpread and typeof(args[2])=="Vector3" then
+                    local d=args[2]; args[2]=d.Unit*d.Magnitude
+                end
+                if S.NoRecoil and typeof(args[2])=="Vector3" then
+                    local d=args[2]; args[2]=Vector3.new(d.X,math.clamp(d.Y,-0.01,0.01),d.Z)
+                end
+                if S.Wallbang and typeof(args[3])=="RaycastParams" then
+                    local rp=RaycastParams.new()
+                    rp.FilterType=Enum.RaycastFilterType.Exclude
+                    rp.FilterDescendantsInstances={}
+                    args[3]=rp
+                end
+                return oldNC(self,table.unpack(args))
             end
-            -- No Recoil: keep direction perfectly level (zero Y deviation)
-            if State.NoRecoil and typeof(args[2])=="Vector3" then
-                local d=args[2]
-                args[2]=Vector3.new(d.X,math.clamp(d.Y,-0.01,0.01),d.Z)
+            if S.RapidFire and (method=="FireServer" or method=="InvokeServer") then
+                oldNC(self,...)
+                task.delay(0.01,function() pcall(oldNC,self,...) end)
             end
-            -- Wallbang: ignore all parts by using a params that hits through everything
-            if State.Wallbang and typeof(args[3])=="RaycastParams" then
-                local rp=RaycastParams.new()
-                rp.FilterType=Enum.RaycastFilterType.Exclude
-                rp.FilterDescendantsInstances={}
-                args[3]=rp
-            end
-            return oldNC(self,table.unpack(args))
-        end
-
-        -- Rapid Fire: intercept FireServer on tool remotes to fire faster
-        if State.RapidFire and (method=="FireServer" or method=="InvokeServer") then
-            oldNC(self,...) -- fire once normally
-            task.delay(0.01,function() pcall(oldNC,self,...) end) -- fire again quickly
-        end
-
-        return oldNC(self,...)
-    end)
-
-    setreadonly(mt,true)
-    State.MiscHooked=true; Log("MISC HOOK ACTIVE")
-end
-
-local function StopMiscHook()
-    if not State.MiscHooked then return end
-    local ok,mt=pcall(getrawmetatable,game)
-    if ok then
-        pcall(setreadonly,mt,false)
-        mt.__namecall=State.MiscOriginal
+            return oldNC(self,...)
+        end)
         pcall(setreadonly,mt,true)
+        S.MiscHooked=true; Log("MISC HOOK ON")
+    elseif not need and S.MiscHooked then
+        local ok,mt=pcall(getrawmetatable,game)
+        if ok then pcall(setreadonly,mt,false); mt.__namecall=S.MiscOrig; pcall(setreadonly,mt,true) end
+        S.MiscHooked=false; S.MiscOrig=nil; Log("MISC HOOK OFF")
     end
-    State.MiscHooked=false; State.MiscOriginal=nil; Log("MISC HOOK OFF")
 end
 
-local function RefreshMiscHook()
-    local needHook = State.NoSpread or State.NoRecoil or State.RapidFire or State.Wallbang
-    if needHook and not State.MiscHooked then StartMiscHook()
-    elseif not needHook and State.MiscHooked then StopMiscHook() end
-end
-
---// ============================================================
---// RESPAWN HANDLER
---// ============================================================
+-- ================================================================
+-- RESPAWN
+-- ================================================================
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
-    if State.Flying     then StartFly()    end
-    if State.Noclip     then StartNoclip() end
-    if State.SpeedActive then ApplySpeed() end
+    if S.Flying      then StartFly()    end
+    if S.Noclip      then StartNoclip() end
+    if S.SpeedActive then ApplySpeed()  end
 end)
 
---// ============================================================
---// SCREEN GUI
---// ============================================================
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name           = "ZarcWare"
-ScreenGui.ResetOnSpawn   = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.DisplayOrder   = 999
-ScreenGui.Parent         = LocalPlayer:WaitForChild("PlayerGui")
+-- ================================================================
+-- GUI
+-- ================================================================
+local ScreenGui=Instance.new("ScreenGui")
+ScreenGui.Name="ZarcWare"; ScreenGui.ResetOnSpawn=false
+ScreenGui.ZIndexBehavior=Enum.ZIndexBehavior.Global
+ScreenGui.IgnoreGuiInset=true; ScreenGui.DisplayOrder=999
+ScreenGui.Parent=PlayerGui
 
-local Window = Instance.new("Frame")
-Window.Name             = "Window"
-Window.Size             = UDim2.new(0,530,0,500)
-Window.Position         = UDim2.new(0.5,-265,0.5,-250)
-Window.BackgroundColor3 = CFG.Background
-Window.BorderSizePixel  = 0
-Window.Parent           = ScreenGui
-Corner(Window,4); Stroke(Window,CFG.Border,1)
+local Win=Instance.new("Frame")
+Win.Name="Window"; Win.Size=UDim2.new(0,530,0,500)
+Win.Position=UDim2.new(0.5,-265,0.5,-250)
+Win.BackgroundColor3=CFG.Background; Win.BorderSizePixel=0; Win.Parent=ScreenGui
+Crn(Win,4); Str(Win,CFG.Border,1)
 
---// Title Bar
-local TitleBar = Instance.new("Frame")
-TitleBar.Size             = UDim2.new(1,0,0,38)
-TitleBar.BackgroundColor3 = CFG.Surface
-TitleBar.BorderSizePixel  = 0
-TitleBar.Parent           = Window
-Corner(TitleBar,4); Stroke(TitleBar,CFG.Border,1)
+-- Titlebar
+local TBar=Instance.new("Frame")
+TBar.Size=UDim2.new(1,0,0,38); TBar.BackgroundColor3=CFG.Surface
+TBar.BorderSizePixel=0; TBar.Parent=Win; Crn(TBar,4); Str(TBar,CFG.Border,1)
 
-local AccentLine = Instance.new("Frame")
-AccentLine.Size             = UDim2.new(1,0,0,2)
-AccentLine.BackgroundColor3 = CFG.Accent
-AccentLine.BorderSizePixel  = 0
-AccentLine.Parent           = TitleBar
+local AccLine=Instance.new("Frame")
+AccLine.Size=UDim2.new(1,0,0,2); AccLine.BackgroundColor3=CFG.Accent
+AccLine.BorderSizePixel=0; AccLine.Parent=TBar
 
-local TitleLbl = Lbl(TitleBar,"> ZARCWARE_",16,CFG.Accent)
-TitleLbl.Size     = UDim2.new(0,150,1,0)
-TitleLbl.Position = UDim2.new(0,12,0,0)
+local TitleL=MkLbl(TBar,"> ZARCWARE_",16,CFG.Accent)
+TitleL.Size=UDim2.new(0,155,1,0); TitleL.Position=UDim2.new(0,12,0,0)
 
-local PremBadge = Instance.new("Frame")
-PremBadge.Size             = UDim2.new(0,76,0,18)
-PremBadge.Position         = UDim2.new(0,168,0.5,-9)
-PremBadge.BackgroundColor3 = Color3.fromRGB(30,25,8)
-PremBadge.BorderSizePixel  = 0
-PremBadge.Parent           = TitleBar
-Corner(PremBadge,2); Stroke(PremBadge,CFG.Accent,1)
-local PremLbl = Lbl(PremBadge,"* PREMIUM",10,CFG.Accent)
-PremLbl.Size = UDim2.new(1,0,1,0); PremLbl.TextXAlignment = Enum.TextXAlignment.Center
+local PBadge=Instance.new("Frame")
+PBadge.Size=UDim2.new(0,74,0,18); PBadge.Position=UDim2.new(0,172,0.5,-9)
+PBadge.BackgroundColor3=Color3.fromRGB(30,25,8); PBadge.BorderSizePixel=0; PBadge.Parent=TBar
+Crn(PBadge,2); Str(PBadge,CFG.Accent,1)
+local PL=MkLbl(PBadge,"* PREMIUM",10,CFG.Accent,Enum.TextXAlignment.Center); PL.Size=UDim2.new(1,0,1,0)
 
-local CloseBtn = Btn(TitleBar,"[X]",Color3.fromRGB(180,40,40),UDim2.new(0,38,0,24),UDim2.new(1,-46,0.5,-12))
-CloseBtn.TextColor3 = Color3.new(1,1,1)
-CloseBtn.MouseButton1Click:Connect(function()
-    if State.Flying      then StopFly()       end
-    if State.Noclip      then StopNoclip()    end
-    if State.SpeedActive then State.SpeedActive=false; ApplySpeed() end
-    if State.AimbotOn    then StopAimbot()    end
-    if State.SilentOn    then StopSilentAim() end
-    if State.TriggerOn   then StopTriggerbot() end
-    if State.MiscHooked  then StopMiscHook()  end
-    if State.AimbotFOVCircle then pcall(function()State.AimbotFOVCircle:Remove()end) end
+local CloseB=MkBtn(TBar,"[X]",Color3.fromRGB(180,40,40),UDim2.new(0,36,0,22),UDim2.new(1,-44,0.5,-11))
+CloseB.MouseButton1Click:Connect(function()
+    pcall(StopFly); pcall(StopNoclip)
+    S.SpeedActive=false; pcall(ApplySpeed)
+    pcall(StopAimbot); pcall(StopSilentAim); pcall(StopTriggerbot)
+    S.NoSpread=false; S.NoRecoil=false; S.RapidFire=false; S.Wallbang=false
+    pcall(RefreshMisc)
+    pcall(function() if S.AimbotFOV then S.AimbotFOV:Remove() end end)
     ScreenGui:Destroy()
 end)
 
---// Blinking cursor
+-- Blink
 local blinkOn=true
 RunService.Heartbeat:Connect(function()
     if math.floor(os.clock()*2)%2==0 then
-        if not blinkOn then TitleLbl.Text="> ZARCWARE_"; blinkOn=true end
+        if not blinkOn then TitleL.Text="> ZARCWARE_"; blinkOn=true end
     else
-        if blinkOn then TitleLbl.Text="> ZARCWARE "; blinkOn=false end
+        if blinkOn then TitleL.Text="> ZARCWARE "; blinkOn=false end
     end
 end)
 
---// Drag
-local dragStart,startPos
-TitleBar.InputBegan:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 then State.Dragging=true; dragStart=i.Position; startPos=Window.Position end
+-- Drag
+local dStart,dWinPos
+TBar.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then S.Dragging=true; dStart=i.Position; dWinPos=Win.Position end
 end)
-TitleBar.InputEnded:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 then State.Dragging=false end
+TBar.InputEnded:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.MouseButton1 then S.Dragging=false end
 end)
 UserInputService.InputChanged:Connect(function(i)
-    if State.Dragging and i.UserInputType==Enum.UserInputType.MouseMovement then
-        local d=i.Position-dragStart
-        Window.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
+    if S.Dragging and i.UserInputType==Enum.UserInputType.MouseMovement then
+        local d=i.Position-dStart
+        Win.Position=UDim2.new(dWinPos.X.Scale,dWinPos.X.Offset+d.X,dWinPos.Y.Scale,dWinPos.Y.Offset+d.Y)
     end
 end)
 
---// ============================================================
---// TAB SYSTEM
---// ============================================================
-local TabBar = Instance.new("Frame")
-TabBar.Size             = UDim2.new(1,0,0,30)
-TabBar.Position         = UDim2.new(0,0,0,38)
-TabBar.BackgroundColor3 = CFG.Background
-TabBar.BorderSizePixel  = 0
-TabBar.Parent           = Window
-local TBLayout = Instance.new("UIListLayout")
-TBLayout.FillDirection = Enum.FillDirection.Horizontal
-TBLayout.SortOrder     = Enum.SortOrder.LayoutOrder
-TBLayout.Parent        = TabBar
+-- Tabs
+local TabBar=Instance.new("Frame")
+TabBar.Size=UDim2.new(1,0,0,30); TabBar.Position=UDim2.new(0,0,0,38)
+TabBar.BackgroundColor3=CFG.Background; TabBar.BorderSizePixel=0; TabBar.Parent=Win
+local TBL=Instance.new("UIListLayout"); TBL.FillDirection=Enum.FillDirection.Horizontal; TBL.SortOrder=Enum.SortOrder.LayoutOrder; TBL.Parent=TabBar
 
-local Sep = Instance.new("Frame")
-Sep.Size = UDim2.new(1,0,0,1); Sep.Position = UDim2.new(0,0,0,68)
-Sep.BackgroundColor3 = CFG.Border; Sep.BorderSizePixel = 0; Sep.Parent = Window
+local Div=Instance.new("Frame"); Div.Size=UDim2.new(1,0,0,1); Div.Position=UDim2.new(0,0,0,68)
+Div.BackgroundColor3=CFG.Border; Div.BorderSizePixel=0; Div.Parent=Win
 
-local TabNames  = {"PLAYERS","HIGHLIGHTS","CHARACTER","AIM","MISC"}
-local TabStates = {}
+local TABS={"PLAYERS","HIGHLIGHTS","CHARACTER","AIM","MISC"}
+local TState={}
 
 local function SetTab(name)
-    for _,t in pairs(TabStates) do
-        local a = t.Name==name
-        t.Btn.BackgroundColor3 = a and CFG.Accent or CFG.Surface
-        t.Lbl.TextColor3       = a and CFG.Background or CFG.TextMuted
+    for _,t in pairs(TState) do
+        local a=t.N==name
+        t.B.BackgroundColor3=a and CFG.Accent or CFG.Surface
+        t.L.TextColor3=a and CFG.Background or CFG.TextMut
     end
-    for _,f in ipairs(Window:GetChildren()) do
-        if f:IsA("Frame") and f.Name:sub(1,4)=="TAB_" then
-            f.Visible = (f.Name=="TAB_"..name)
-        end
+    for _,f in ipairs(Win:GetChildren()) do
+        if f:IsA("Frame") and f.Name:sub(1,4)=="TAB_" then f.Visible=(f.Name=="TAB_"..name) end
     end
 end
 
-for i,name in ipairs(TabNames) do
-    local btn = Instance.new("TextButton")
-    btn.Size             = UDim2.new(0,88,1,0)
-    btn.BackgroundColor3 = CFG.Surface
-    btn.Text             = ""; btn.BorderSizePixel = 0; btn.LayoutOrder = i
-    btn.Parent           = TabBar
-    Stroke(btn,CFG.Border,1)
-    local lbl = Lbl(btn,name,10,CFG.TextMuted); lbl.Size=UDim2.new(1,0,1,0); lbl.TextXAlignment=Enum.TextXAlignment.Center
-    TabStates[name] = {Name=name,Btn=btn,Lbl=lbl}
+for i,name in ipairs(TABS) do
+    local btn=Instance.new("TextButton")
+    btn.Size=UDim2.new(0,88,1,0); btn.BackgroundColor3=CFG.Surface
+    btn.Text=""; btn.BorderSizePixel=0; btn.LayoutOrder=i; btn.Parent=TabBar
+    Str(btn,CFG.Border,1)
+    local lbl=MkLbl(btn,name,10,CFG.TextMut); lbl.Size=UDim2.new(1,0,1,0); lbl.TextXAlignment=Enum.TextXAlignment.Center
+    TState[name]={N=name,B=btn,L=lbl}
     btn.MouseButton1Click:Connect(function() SetTab(name) end)
 end
 
-local function MakeTab(name)
-    local f = Instance.new("Frame")
-    f.Name = "TAB_"..name
-    f.Size = UDim2.new(1,0,1,-130)
-    f.Position = UDim2.new(0,0,0,70)
-    f.BackgroundTransparency = 1
-    f.Visible = false; f.Parent = Window
-    Pad(f,6,6,6,6)
-    return f
+local function MkTab(name)
+    local f=Instance.new("Frame"); f.Name="TAB_"..name
+    f.Size=UDim2.new(1,0,1,-130); f.Position=UDim2.new(0,0,0,70)
+    f.BackgroundTransparency=1; f.Visible=false; f.Parent=Win; Pad(f,6,6,6,6); return f
 end
 
-local function ScrollTab(name)
-    local f = MakeTab(name)
-    local sf = Instance.new("ScrollingFrame")
-    sf.Size = UDim2.new(1,0,1,0)
-    sf.BackgroundTransparency = 1
-    sf.ScrollBarThickness = 3
-    sf.CanvasSize = UDim2.new(0,0,0,0)
-    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    sf.Parent = f
+local function MkScroll(par)
+    local sf=Instance.new("ScrollingFrame"); sf.Size=UDim2.new(1,0,1,0)
+    sf.BackgroundTransparency=1; sf.ScrollBarThickness=3
+    sf.CanvasSize=UDim2.new(0,0,0,0); sf.AutomaticCanvasSize=Enum.AutomaticSize.Y; sf.Parent=par
     Pad(sf,2,2,4,2)
-    local layout = Instance.new("UIListLayout")
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding   = UDim.new(0,5)
-    layout.Parent    = sf
-    return f, sf
+    local lay=Instance.new("UIListLayout"); lay.SortOrder=Enum.SortOrder.LayoutOrder; lay.Padding=UDim.new(0,5); lay.Parent=sf
+    return sf
 end
 
--- Reusable toggle row for list-based tabs
-local function MakeToggleRow(parent, labelText, default, order, callback)
-    local row = Instance.new("Frame")
-    row.Size             = UDim2.new(1,0,0,32)
-    row.BackgroundColor3 = CFG.Surface
-    row.BorderSizePixel  = 0
-    row.LayoutOrder      = order
-    row.Parent           = parent
-    Corner(row,2); Stroke(row,CFG.Border,1); Pad(row,0,8,0,8)
+local function SecHdr(par,txt,ord)
+    local l=MkLbl(par,"-- "..txt.." --",11,CFG.Accent,Enum.TextXAlignment.Center)
+    l.Size=UDim2.new(1,0,0,14); l.LayoutOrder=ord
+end
 
-    local lbl = Lbl(row,labelText,12,CFG.TextPrimary)
-    lbl.Size = UDim2.new(0.65,0,1,0)
-
-    local statusLbl = Lbl(row,default and "ON" or "OFF",11,
-        default and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40), Enum.TextXAlignment.Right)
-    statusLbl.Size = UDim2.new(0.2,0,1,0); statusLbl.Position = UDim2.new(0.65,0,0,0)
-
-    local track = Btn(row,"[ ]",default and Color3.fromRGB(35,134,54) or CFG.Border,UDim2.new(0,36,0,18),UDim2.new(1,-38,0.5,-9))
-    track.TextSize = 9; track.Font = PF
-
-    local on = default
-    track.MouseButton1Click:Connect(function()
-        on = not on
-        Tween(track,TweenInfo.new(0.12),{BackgroundColor3=on and Color3.fromRGB(35,134,54) or CFG.Border})
-        statusLbl.Text       = on and "ON" or "OFF"
-        statusLbl.TextColor3 = on and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40)
-        callback(on)
+local function TRow(par,txt,def,ord,cb)
+    local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,32); row.BackgroundColor3=CFG.Surface
+    row.BorderSizePixel=0; row.LayoutOrder=ord; row.Parent=par; Crn(row,2); Str(row,CFG.Border,1); Pad(row,0,8,0,8)
+    local lbl=MkLbl(row,txt,12,CFG.TextPri); lbl.Size=UDim2.new(0.6,0,1,0)
+    local stl=MkLbl(row,def and "ON" or "OFF",11,def and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40),Enum.TextXAlignment.Right)
+    stl.Size=UDim2.new(0.2,0,1,0); stl.Position=UDim2.new(0.6,0,0,0)
+    local btn=MkBtn(row,"",def and Color3.fromRGB(35,134,54) or CFG.Border,UDim2.new(0,34,0,18),UDim2.new(1,-36,0.5,-9))
+    local on=def
+    btn.MouseButton1Click:Connect(function()
+        on=not on
+        Tw(btn,TweenInfo.new(0.12),{BackgroundColor3=on and Color3.fromRGB(35,134,54) or CFG.Border})
+        stl.Text=on and "ON" or "OFF"; stl.TextColor3=on and Color3.fromRGB(88,214,141) or Color3.fromRGB(180,40,40)
+        cb(on)
     end)
-    return track, statusLbl
+    return btn,stl
 end
 
--- Reusable slider row for list-based tabs
-local function MakeSliderRow(parent, labelText, minVal, maxVal, defaultVal, decimals, order, onChanged)
-    local row = Instance.new("Frame")
-    row.Size             = UDim2.new(1,0,0,40)
-    row.BackgroundColor3 = CFG.Surface
-    row.BorderSizePixel  = 0
-    row.LayoutOrder      = order
-    row.Parent           = parent
-    Corner(row,2); Stroke(row,CFG.Border,1); Pad(row,5,10,5,10)
-
-    local fmt = decimals>0 and ("%."..decimals.."f") or "%d"
-    local lbl = Lbl(row,labelText,11,CFG.TextMuted); lbl.Size=UDim2.new(0.6,0,0,14)
-    local valLbl = Lbl(row,string.format(fmt,defaultVal),11,CFG.TextPrimary,Enum.TextXAlignment.Right)
-    valLbl.Size=UDim2.new(0.4,0,0,14)
-
-    local track = Instance.new("Frame")
-    track.Size = UDim2.new(1,0,0,4); track.Position = UDim2.new(0,0,1,-10)
-    track.BackgroundColor3 = CFG.Border; track.BorderSizePixel = 0; track.Parent = row
-    Corner(track,2)
-
-    local rel0 = (defaultVal-minVal)/(maxVal-minVal)
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(rel0,0,1,0); fill.BackgroundColor3 = CFG.Accent
-    fill.BorderSizePixel = 0; fill.Parent = track; Corner(fill,2)
-
-    local handle = Btn(track,"",Color3.new(1,1,1),UDim2.new(0,12,0,12),UDim2.new(rel0,-6,0.5,-6))
-    Stroke(handle,CFG.Border,0)
-
+local function SRow(par,txt,mn,mx,def,dec,ord,cb)
+    local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,40); row.BackgroundColor3=CFG.Surface
+    row.BorderSizePixel=0; row.LayoutOrder=ord; row.Parent=par; Crn(row,2); Str(row,CFG.Border,1); Pad(row,5,10,5,10)
+    local fmt=dec>0 and ("%."..dec.."f") or "%d"
+    local lbl=MkLbl(row,txt,11,CFG.TextMut); lbl.Size=UDim2.new(0.6,0,0,14)
+    local vlbl=MkLbl(row,string.format(fmt,def),11,CFG.TextPri,Enum.TextXAlignment.Right); vlbl.Size=UDim2.new(0.4,0,0,14)
+    local trk=Instance.new("Frame"); trk.Size=UDim2.new(1,0,0,4); trk.Position=UDim2.new(0,0,1,-10)
+    trk.BackgroundColor3=CFG.Border; trk.BorderSizePixel=0; trk.Parent=row; Crn(trk,2)
+    local rel0=(def-mn)/(mx-mn)
+    local fill=Instance.new("Frame"); fill.Size=UDim2.new(rel0,0,1,0); fill.BackgroundColor3=CFG.Accent
+    fill.BorderSizePixel=0; fill.Parent=trk; Crn(fill,2)
+    local hnd=MkBtn(trk,"",Color3.new(1,1,1),UDim2.new(0,12,0,12),UDim2.new(rel0,-6,0.5,-6)); Str(hnd,CFG.Border,0)
     local drag=false
-    handle.MouseButton1Down:Connect(function() drag=true end)
+    hnd.MouseButton1Down:Connect(function() drag=true end)
     UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end)
     UserInputService.InputChanged:Connect(function(i)
         if drag and i.UserInputType==Enum.UserInputType.MouseMovement then
-            local rel=math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-            local val=decimals>0 and math.floor((minVal+rel*(maxVal-minVal))*(10^decimals))/(10^decimals) or math.floor(minVal+rel*(maxVal-minVal))
-            fill.Size=UDim2.new(rel,0,1,0); handle.Position=UDim2.new(rel,-6,0.5,-6)
-            valLbl.Text=string.format(fmt,val); onChanged(val)
+            local rel=math.clamp((i.Position.X-trk.AbsolutePosition.X)/trk.AbsoluteSize.X,0,1)
+            local val=dec>0 and math.floor((mn+rel*(mx-mn))*(10^dec))/(10^dec) or math.floor(mn+rel*(mx-mn))
+            fill.Size=UDim2.new(rel,0,1,0); hnd.Position=UDim2.new(rel,-6,0.5,-6)
+            vlbl.Text=string.format(fmt,val); cb(val)
         end
     end)
 end
 
--- Part selector helper
-local function MakePartSelector(parent, order, partList, default, callback)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1,0,0,28); row.BackgroundTransparency=1
-    row.LayoutOrder = order; row.Parent = parent
-
-    local layout = Instance.new("UIListLayout")
-    layout.FillDirection = Enum.FillDirection.Horizontal
-    layout.Padding = UDim.new(0,4); layout.Parent = row
-
-    local btns = {}
-    for _,pname in ipairs(partList) do
-        local label = pname=="HumanoidRootPart" and "ROOT" or pname:upper():sub(1,5)
-        local pb = Btn(row,label,pname==default and CFG.Accent or CFG.Surface,UDim2.new(0,pname=="HumanoidRootPart" and 50 or 46,0,26))
-        pb.TextColor3 = pname==default and CFG.Background or CFG.TextMuted
-        pb.TextSize   = 10; pb.Font = PF
-        btns[pname]   = pb
+local function PrtSel(par,ord,def,cb)
+    local pts={"Head","HumanoidRootPart","UpperTorso","LowerTorso"}
+    local lbls={"HEAD","ROOT","UPPER","LOWER"}
+    local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,26); row.BackgroundTransparency=1; row.LayoutOrder=ord; row.Parent=par
+    local lay=Instance.new("UIListLayout"); lay.FillDirection=Enum.FillDirection.Horizontal; lay.Padding=UDim.new(0,4); lay.Parent=row
+    local btns={}
+    for i,pn in ipairs(pts) do
+        local pb=MkBtn(row,lbls[i],pn==def and CFG.Accent or CFG.Surface,UDim2.new(0,50,0,24))
+        pb.TextColor3=pn==def and CFG.Background or CFG.TextMut; pb.TextSize=10
+        btns[pn]=pb
         pb.MouseButton1Click:Connect(function()
-            for _,other in pairs(btns) do
-                other.BackgroundColor3 = CFG.Surface; other.TextColor3 = CFG.TextMuted
-            end
-            pb.BackgroundColor3 = CFG.Accent; pb.TextColor3 = CFG.Background
-            callback(pname)
+            for _,ob in pairs(btns) do ob.BackgroundColor3=CFG.Surface; ob.TextColor3=CFG.TextMut end
+            pb.BackgroundColor3=CFG.Accent; pb.TextColor3=CFG.Background; cb(pn)
         end)
     end
-    return btns
 end
 
-local function SectionLbl(parent, text, order)
-    local lbl = Lbl(parent,"-- "..text.." --",11,CFG.Accent,Enum.TextXAlignment.Center)
-    lbl.Size = UDim2.new(1,0,0,14); lbl.LayoutOrder = order
-    return lbl
+local function HRow(par,txt,ord)
+    local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,12); row.BackgroundTransparency=1; row.LayoutOrder=ord; row.Parent=par
+    local l=MkLbl(row,txt,9,CFG.TextMut,Enum.TextXAlignment.Center); l.Size=UDim2.new(1,0,1,0)
 end
 
---// ============================================================
---// TAB: PLAYERS
---// ============================================================
-local TPlayers = MakeTab("PLAYERS")
+-- ================================================================
+-- TAB: PLAYERS
+-- ================================================================
+local TPlayers=MkTab("PLAYERS")
+local PLScr=Instance.new("ScrollingFrame"); PLScr.Size=UDim2.new(0,282,1,0); PLScr.BackgroundTransparency=1
+PLScr.ScrollBarThickness=3; PLScr.CanvasSize=UDim2.new(0,0,0,0); PLScr.AutomaticCanvasSize=Enum.AutomaticSize.Y; PLScr.Parent=TPlayers
+local PLL=Instance.new("UIListLayout"); PLL.SortOrder=Enum.SortOrder.Name; PLL.Padding=UDim.new(0,4); PLL.Parent=PLScr
 
-local PLFrame = Instance.new("ScrollingFrame")
-PLFrame.Size=UDim2.new(0,286,1,0); PLFrame.BackgroundTransparency=1
-PLFrame.ScrollBarThickness=3; PLFrame.CanvasSize=UDim2.new(0,0,0,0)
-PLFrame.AutomaticCanvasSize=Enum.AutomaticSize.Y; PLFrame.Parent=TPlayers
-local PLLayout=Instance.new("UIListLayout"); PLLayout.SortOrder=Enum.SortOrder.Name; PLLayout.Padding=UDim.new(0,4); PLLayout.Parent=PLFrame
+local RPan=Instance.new("Frame"); RPan.Size=UDim2.new(0,192,1,0); RPan.Position=UDim2.new(0,290,0,0)
+RPan.BackgroundTransparency=1; RPan.Parent=TPlayers
 
-local PRightPanel = Instance.new("Frame")
-PRightPanel.Size=UDim2.new(0,192,1,0); PRightPanel.Position=UDim2.new(0,294,0,0)
-PRightPanel.BackgroundTransparency=1; PRightPanel.Parent=TPlayers
+local BA=MkBtn(RPan,"APPLY HL",  Color3.fromRGB(31,111,235),UDim2.new(1,0,0,28),UDim2.new(0,0,0,0))
+local BR=MkBtn(RPan,"REMOVE HL", Color3.fromRGB(180,40,40), UDim2.new(1,0,0,28),UDim2.new(0,0,0,33))
+local BH=MkBtn(RPan,"HL ALL",    Color3.fromRGB(35,134,54), UDim2.new(1,0,0,28),UDim2.new(0,0,0,66))
+local BC=MkBtn(RPan,"CLEAR ALL", Color3.fromRGB(60,55,35),  UDim2.new(1,0,0,28),UDim2.new(0,0,0,99))
 
-local PR = PRightPanel
-local BApply  = Btn(PR,"APPLY HL",  Color3.fromRGB(31,111,235),UDim2.new(1,0,0,28),UDim2.new(0,0,0,0))
-local BRemove = Btn(PR,"REMOVE HL", Color3.fromRGB(180,40,40), UDim2.new(1,0,0,28),UDim2.new(0,0,0,33))
-local BAll    = Btn(PR,"HL ALL",    Color3.fromRGB(35,134,54), UDim2.new(1,0,0,28),UDim2.new(0,0,0,66))
-local BClear  = Btn(PR,"CLEAR ALL", Color3.fromRGB(60,55,35),  UDim2.new(1,0,0,28),UDim2.new(0,0,0,99))
-
-BApply.MouseButton1Click:Connect(function()
-    if State.SelectedPlayer then ApplyHighlight(State.SelectedPlayer,State.HLColor,State.HLTransparency,State.HLFill,State.HLOutline)
-    else Log("SELECT A PLAYER") end
+BA.MouseButton1Click:Connect(function()
+    if S.SelectedPlayer then ApplyHL(S.SelectedPlayer,S.HLColor,S.HLTrans,S.HLFill,S.HLOutline) else Log("SELECT PLAYER") end
 end)
-BRemove.MouseButton1Click:Connect(function()
-    if State.SelectedPlayer then RemoveHighlight(State.SelectedPlayer) else Log("SELECT A PLAYER") end
-end)
-BAll.MouseButton1Click:Connect(HighlightAll)
-BClear.MouseButton1Click:Connect(ClearAllHL)
+BR.MouseButton1Click:Connect(function() if S.SelectedPlayer then RemHL(S.SelectedPlayer) end end)
+BH.MouseButton1Click:Connect(HLAll)
+BC.MouseButton1Click:Connect(ClearHL)
 
-local PlayerRows = {}
-local function MakePlayerRow(player)
-    local row = Btn(PLFrame,"",CFG.Surface,UDim2.new(1,0,0,42))
-    row.Name = player.Name; row.AutoButtonColor = false
-    local stroke = Stroke(row,CFG.Border,1)
-    local avc = ({Color3.fromRGB(31,111,235),Color3.fromRGB(137,87,229),Color3.fromRGB(35,134,54),Color3.fromRGB(180,40,40),Color3.fromRGB(163,113,31)})[(#player.Name%5)+1]
-    local av = Instance.new("Frame"); av.Size=UDim2.new(0,26,0,26); av.Position=UDim2.new(0,7,0.5,-13)
-    av.BackgroundColor3=avc; av.BorderSizePixel=0; av.Parent=row; Corner(av,2)
-    local initL=Lbl(av,player.Name:sub(1,2):upper(),10,Color3.new(1,1,1),Enum.TextXAlignment.Center); initL.Size=UDim2.new(1,0,1,0)
-    local nameL=Lbl(row,player.Name,11,CFG.TextPrimary); nameL.Size=UDim2.new(1,-50,0,14); nameL.Position=UDim2.new(0,40,0,8)
+local PRows={}
+local function MkPRow(player)
+    local row=MkBtn(PLScr,"",CFG.Surface,UDim2.new(1,0,0,40))
+    row.Name=player.Name; row.AutoButtonColor=false
+    local sk=Str(row,CFG.Border,1)
+    local avc=({Color3.fromRGB(31,111,235),Color3.fromRGB(137,87,229),Color3.fromRGB(35,134,54),Color3.fromRGB(180,40,40),Color3.fromRGB(163,113,31)})[(#player.Name%5)+1]
+    local av=Instance.new("Frame"); av.Size=UDim2.new(0,24,0,24); av.Position=UDim2.new(0,6,0.5,-12)
+    av.BackgroundColor3=avc; av.BorderSizePixel=0; av.Parent=row; Crn(av,2)
+    local il=MkLbl(av,player.Name:sub(1,2):upper(),10,Color3.new(1,1,1),Enum.TextXAlignment.Center); il.Size=UDim2.new(1,0,1,0)
+    local nl=MkLbl(row,player.Name,11,CFG.TextPri); nl.Size=UDim2.new(1,-44,0,14); nl.Position=UDim2.new(0,36,0,5)
     local dot=Instance.new("Frame"); dot.Size=UDim2.new(0,7,0,7); dot.Position=UDim2.new(1,-13,0.5,-3.5)
-    dot.BackgroundColor3=Color3.fromRGB(44,52,68); dot.BorderSizePixel=0; dot.Parent=row; Corner(dot,4)
+    dot.BackgroundColor3=Color3.fromRGB(44,52,68); dot.BorderSizePixel=0; dot.Parent=row; Crn(dot,4)
     row.MouseButton1Click:Connect(function()
-        State.SelectedPlayer=player
-        for _,r in pairs(PlayerRows) do r.Stroke.Color=CFG.Border; r.Frame.BackgroundColor3=CFG.Surface end
-        stroke.Color=CFG.Accent; row.BackgroundColor3=Color3.fromRGB(15,14,8)
-        Log("SELECTED: "..player.Name)
+        S.SelectedPlayer=player
+        for _,r in pairs(PRows) do r.s.Color=CFG.Border; r.f.BackgroundColor3=CFG.Surface end
+        sk.Color=CFG.Accent; row.BackgroundColor3=Color3.fromRGB(15,14,8)
     end)
-    PlayerRows[player]={Frame=row,Dot=dot,Stroke=stroke}
+    PRows[player]={f=row,s=sk,d=dot}
 end
-
-for _,p in ipairs(Players:GetPlayers()) do MakePlayerRow(p) end
-Players.PlayerAdded:Connect(function(p) MakePlayerRow(p); Log("JOINED: "..p.Name) end)
+for _,p in ipairs(Players:GetPlayers()) do MkPRow(p) end
+Players.PlayerAdded:Connect(MkPRow)
 Players.PlayerRemoving:Connect(function(p)
-    if PlayerRows[p] then PlayerRows[p].Frame:Destroy(); PlayerRows[p]=nil end
-    if State.SelectedPlayer==p then State.SelectedPlayer=nil end
+    if PRows[p] then PRows[p].f:Destroy(); PRows[p]=nil end
+    if S.SelectedPlayer==p then S.SelectedPlayer=nil end
 end)
 
---// ============================================================
---// TAB: HIGHLIGHTS
---// ============================================================
-local _, HLScroll = ScrollTab("HIGHLIGHTS")
-
-SectionLbl(HLScroll,"SELECT COLOR",1)
-
--- Color buttons row
-local colorRowContainer = Instance.new("Frame")
-colorRowContainer.Size=UDim2.new(1,0,0,36); colorRowContainer.BackgroundTransparency=1
-colorRowContainer.LayoutOrder=2; colorRowContainer.Parent=HLScroll
-local colorLayout=Instance.new("UIListLayout"); colorLayout.FillDirection=Enum.FillDirection.Horizontal
-colorLayout.Padding=UDim.new(0,5); colorLayout.Parent=colorRowContainer
-
-local activeCS=nil
+-- ================================================================
+-- TAB: HIGHLIGHTS
+-- ================================================================
+local THL=MkTab("HIGHLIGHTS"); local HLS=MkScroll(THL)
+SecHdr(HLS,"COLOR",1)
+local cRow=Instance.new("Frame"); cRow.Size=UDim2.new(1,0,0,34); cRow.BackgroundTransparency=1; cRow.LayoutOrder=2; cRow.Parent=HLS
+local cRL=Instance.new("UIListLayout"); cRL.FillDirection=Enum.FillDirection.Horizontal; cRL.Padding=UDim.new(0,5); cRL.Parent=cRow
+local aCS=nil
 for _,c in ipairs(CFG.HLColors) do
-    local cb=Btn(colorRowContainer,"",c.Color,UDim2.new(0,34,0,34))
-    cb.Parent=colorRowContainer; Corner(cb,2)
-    local s=Stroke(cb,Color3.new(1,1,1),0)
+    local cb=MkBtn(cRow,"",c.Color,UDim2.new(0,32,0,32)); Crn(cb,2)
+    local cs=Str(cb,Color3.new(1,1,1),0)
     cb.MouseButton1Click:Connect(function()
-        if activeCS then activeCS.Thickness=0 end
-        s.Thickness=2; activeCS=s; State.HLColor=c.Color; Log("COLOR: "..c.Name)
+        if aCS then aCS.Thickness=0 end; cs.Thickness=2; aCS=cs; S.HLColor=c.Color
     end)
-    if c.Color==State.HLColor then s.Thickness=2; activeCS=s end
+    if c.Color==S.HLColor then cs.Thickness=2; aCS=cs end
 end
+SecHdr(HLS,"SETTINGS",3)
+SRow(HLS,"FILL TRANSPARENCY",0,1,0.5,1,4,function(v) S.HLTrans=v end)
+TRow(HLS,"FILL ENABLED",true,5,function(v) S.HLFill=v end)
+TRow(HLS,"OUTLINE ONLY",false,6,function(v) S.HLOutline=v end)
+TRow(HLS,"BOX ESP",false,7,function(v) S.HLBox=v; if v then StartBox() else StopBox() end end)
+TRow(HLS,"TRACERS",false,8,function(v) S.HLTracers=v; if v then StartTracers() else StopTracers() end end)
 
-SectionLbl(HLScroll,"TRANSPARENCY",3)
-MakeSliderRow(HLScroll,"FILL TRANSPARENCY",0,1,0.5,1,4,function(v) State.HLTransparency=v end)
-
-SectionLbl(HLScroll,"SETTINGS",5)
-MakeToggleRow(HLScroll,"FILL ENABLED",true,6,function(v) State.HLFill=v end)
-MakeToggleRow(HLScroll,"OUTLINE ONLY",false,7,function(v) State.HLOutline=v end)
-MakeToggleRow(HLScroll,"BOX ESP",false,8,function(v)
-    State.HLBox=v
-    if v then StartBoxESP() else StopBoxESP() end
-end)
-MakeToggleRow(HLScroll,"TRACERS",false,9,function(v)
-    State.HLTracers=v
-    if v then StartTracers() else StopTracers() end
-end)
-
---// ============================================================
---// TAB: CHARACTER
---// ============================================================
-local _, CharScroll = ScrollTab("CHARACTER")
-
-SectionLbl(CharScroll,"FLY",1)
-MakeToggleRow(CharScroll,"FLY MODE",false,2,function(v) if v then StartFly() else StopFly() end end)
-MakeSliderRow(CharScroll,"FLY SPEED",10,200,60,0,3,function(v) State.FlySpeed=v end)
-
-SectionLbl(CharScroll,"NOCLIP",4)
-MakeToggleRow(CharScroll,"NOCLIP",false,5,function(v) if v then StartNoclip() else StopNoclip() end end)
-
-SectionLbl(CharScroll,"SPEED",6)
-MakeToggleRow(CharScroll,"SPEED HACK",false,7,function(v)
-    State.SpeedActive=v; ApplySpeed(); Log(v and "SPEED ON" or "SPEED OFF")
-end)
-MakeSliderRow(CharScroll,"WALKSPEED",16,500,16,0,8,function(v) State.WalkSpeed=v; if State.SpeedActive then ApplySpeed() end end)
-
-SectionLbl(CharScroll,"JUMP",9)
-MakeSliderRow(CharScroll,"JUMP POWER",50,500,50,0,10,function(v) State.JumpPower=v; if State.SpeedActive then ApplySpeed() end end)
-
-SectionLbl(CharScroll,"GRAVITY",11)
-MakeToggleRow(CharScroll,"CUSTOM GRAVITY",false,12,function(v)
-    State.GravityActive=v; if not v then workspace.Gravity=State.DefaultGravity end
-end)
-MakeSliderRow(CharScroll,"GRAVITY VALUE",0,196,196,0,13,function(v)
-    if State.GravityActive then workspace.Gravity=v end
-end)
-
-SectionLbl(CharScroll,"EXTRAS",14)
-MakeToggleRow(CharScroll,"INFINITE JUMP",false,15,function(v)
-    State.InfJump=v; Log(v and "INF JUMP ON" or "INF JUMP OFF")
-end)
+-- ================================================================
+-- TAB: CHARACTER
+-- ================================================================
+local TChr=MkTab("CHARACTER"); local ChS=MkScroll(TChr)
+SecHdr(ChS,"FLY",1)
+TRow(ChS,"FLY MODE",false,2,function(v) if v then StartFly() else StopFly() end end)
+SRow(ChS,"FLY SPEED",10,200,60,0,3,function(v) S.FlySpeed=v end)
+SecHdr(ChS,"NOCLIP",4)
+TRow(ChS,"NOCLIP",false,5,function(v) if v then StartNoclip() else StopNoclip() end end)
+SecHdr(ChS,"SPEED",6)
+TRow(ChS,"SPEED HACK",false,7,function(v) S.SpeedActive=v; ApplySpeed() end)
+SRow(ChS,"WALKSPEED",16,500,16,0,8,function(v) S.WalkSpeed=v; if S.SpeedActive then ApplySpeed() end end)
+SecHdr(ChS,"JUMP",9)
+SRow(ChS,"JUMP POWER",50,500,50,0,10,function(v) S.JumpPower=v; if S.SpeedActive then ApplySpeed() end end)
+SecHdr(ChS,"GRAVITY",11)
+TRow(ChS,"CUSTOM GRAVITY",false,12,function(v) S.GravityActive=v; if not v then pcall(function() workspace.Gravity=S.DefaultGravity end) end end)
+SRow(ChS,"GRAVITY VALUE",0,196,196,0,13,function(v) if S.GravityActive then pcall(function() workspace.Gravity=v end) end end)
+SecHdr(ChS,"EXTRAS",14)
+TRow(ChS,"INFINITE JUMP",false,15,function(v) S.InfJump=v end)
 UserInputService.JumpRequest:Connect(function()
-    if State.InfJump then
-        local char=LocalPlayer.Character
-        local hum=char and char:FindFirstChildOfClass("Humanoid")
-        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    if S.InfJump then
+        local ch=LocalPlayer.Character; local hm=ch and ch:FindFirstChildOfClass("Humanoid")
+        if hm then pcall(function() hm:ChangeState(Enum.HumanoidStateType.Jumping) end) end
     end
 end)
-MakeToggleRow(CharScroll,"GHOST MODE",false,16,function(v)
-    State.GhostMode=v
-    local char=LocalPlayer.Character; if not char then return end
-    for _,p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then p.LocalTransparencyModifier=v and 0.6 or 0 end
-    end; Log(v and "GHOST ON" or "GHOST OFF")
+TRow(ChS,"GHOST MODE",false,16,function(v)
+    local ch=LocalPlayer.Character; if not ch then return end
+    for _,p in ipairs(ch:GetDescendants()) do if p:IsA("BasePart") then p.LocalTransparencyModifier=v and 0.6 or 0 end end
 end)
 
---// ============================================================
---// TAB: AIM
---// ============================================================
-local _, AimScroll = ScrollTab("AIM")
-
--- ---- AIMBOT Section ----
-SectionLbl(AimScroll,"AIMBOT",1)
-MakeToggleRow(AimScroll,"AIMBOT",false,2,function(v)
-    State.AimbotOn=v
+-- ================================================================
+-- TAB: AIM
+-- ================================================================
+local TAim=MkTab("AIM"); local AimS=MkScroll(TAim)
+SecHdr(AimS,"AIMBOT",1)
+TRow(AimS,"AIMBOT",false,2,function(v)
+    S.AimbotOn=v
     if v then
-        if not State.AimbotFOVCircle then
-            State.AimbotFOVCircle=Drawing.new("Circle")
-        end
+        if not S.AimbotFOV then pcall(function() S.AimbotFOV=Drawing.new("Circle") end) end
         StartAimbot()
-    else
-        StopAimbot()
-        if State.AimbotFOVCircle then State.AimbotFOVCircle.Visible=false end
-    end
+    else StopAimbot() end
 end)
-MakeSliderRow(AimScroll,"FOV RADIUS",10,300,90,0,3,function(v) State.AimbotSettings.FOVAmount=v end)
-MakeSliderRow(AimScroll,"SMOOTHNESS",0,1,0.15,2,4,function(v) State.AimbotSettings.Sensitivity=v end)
+SRow(AimS,"FOV RADIUS",10,300,90,0,3,function(v) S.AimbotCfg.FOVAmount=v end)
+SRow(AimS,"SMOOTHNESS",0,1,0.15,2,4,function(v) S.AimbotCfg.Sensitivity=v end)
+HRow(AimS,"TARGET PART:",5)
+PrtSel(AimS,6,"Head",function(v) S.AimbotCfg.LockPart=v end)
+TRow(AimS,"TEAM CHECK",false,7,function(v) S.AimbotCfg.TeamCheck=v end)
+TRow(AimS,"ALIVE CHECK",true,8,function(v) S.AimbotCfg.AliveCheck=v end)
+TRow(AimS,"TOGGLE MODE",false,9,function(v) S.AimbotCfg.Toggle=v end)
+TRow(AimS,"FOV CIRCLE",true,10,function(v) S.AimbotCfg.FOVVisible=v end)
+HRow(AimS,"HOLD RMB TO LOCK",11)
 
-local partList = {"Head","HumanoidRootPart","UpperTorso","LowerTorso"}
-
--- Aimbot part selector label
-local abPartLblRow = Instance.new("Frame")
-abPartLblRow.Size=UDim2.new(1,0,0,14); abPartLblRow.BackgroundTransparency=1; abPartLblRow.LayoutOrder=5; abPartLblRow.Parent=AimScroll
-Lbl(abPartLblRow,"TARGET PART:",11,CFG.TextMuted)
-
-MakePartSelector(AimScroll,6,partList,"Head",function(v)
-    State.AimbotSettings.LockPart=v; Log("AB TARGET: "..v)
+SecHdr(AimS,"SILENT AIM",12)
+TRow(AimS,"SILENT AIM",false,13,function(v)
+    S.SilentOn=v
+    if v then pcall(StartSilentAim); if not S.SilentHooked then S.SilentOn=false end
+    else pcall(StopSilentAim) end
 end)
+SRow(AimS,"FOV RADIUS",10,300,150,0,14,function(v) S.SilentCfg.FOVRadius=v end)
+HRow(AimS,"TARGET PART:",15)
+PrtSel(AimS,16,"Head",function(v) S.SilentCfg.LockPart=v end)
+TRow(AimS,"CHECK FOV",true,17,function(v) S.SilentCfg.CheckFOV=v end)
+TRow(AimS,"ALIVE CHECK",true,18,function(v) S.SilentCfg.AliveCheck=v end)
+TRow(AimS,"TEAM CHECK",false,19,function(v) S.SilentCfg.TeamCheck=v end)
+HRow(AimS,"NEEDS GETRAWMETATABLE",20)
 
-MakeToggleRow(AimScroll,"TEAM CHECK",false,7,function(v) State.AimbotSettings.TeamCheck=v end)
-MakeToggleRow(AimScroll,"ALIVE CHECK",true,8,function(v) State.AimbotSettings.AliveCheck=v end)
-MakeToggleRow(AimScroll,"TOGGLE MODE",false,9,function(v) State.AimbotSettings.Toggle=v end)
-MakeToggleRow(AimScroll,"FOV VISIBLE",true,10,function(v) State.AimbotSettings.FOVVisible=v end)
+SecHdr(AimS,"TRIGGERBOT",21)
+TRow(AimS,"TRIGGERBOT",false,22,function(v) S.TriggerOn=v; if v then StartTriggerbot() else StopTriggerbot() end end)
+SRow(AimS,"TRIGGER DELAY",0,0.5,0.05,2,23,function(v) S.TriggerDelay=v end)
+HRow(AimS,"NEEDS MOUSE1PRESS",24)
 
-local abHintRow=Instance.new("Frame"); abHintRow.Size=UDim2.new(1,0,0,12); abHintRow.BackgroundTransparency=1; abHintRow.LayoutOrder=11; abHintRow.Parent=AimScroll
-Lbl(abHintRow,"HOLD RMB TO LOCK ON TARGET",10,CFG.TextMuted,Enum.TextXAlignment.Center).Size=UDim2.new(1,0,1,0)
+-- ================================================================
+-- TAB: MISC
+-- ================================================================
+local TMisc=MkTab("MISC"); local MiscS=MkScroll(TMisc)
+SecHdr(MiscS,"WEAPON MODS",1)
+TRow(MiscS,"NO SPREAD",false,2,function(v) S.NoSpread=v; pcall(RefreshMisc) end)
+TRow(MiscS,"NO RECOIL",false,3,function(v) S.NoRecoil=v; pcall(RefreshMisc) end)
+TRow(MiscS,"RAPID FIRE",false,4,function(v) S.RapidFire=v; pcall(RefreshMisc) end)
+TRow(MiscS,"WALLBANG",false,5,function(v) S.Wallbang=v; pcall(RefreshMisc) end)
+HRow(MiscS,"ALL NEED GETRAWMETATABLE",6)
 
--- ---- SILENT AIM Section ----
-SectionLbl(AimScroll,"SILENT AIM",12)
-MakeToggleRow(AimScroll,"SILENT AIM",false,13,function(v)
-    State.SilentOn=v
-    if v then
-        pcall(StartSilentAim)
-        if not State.SilentHooked then
-            State.SilentOn=false; Log("SA: UNSUPPORTED EXECUTOR")
-        end
-    else
-        pcall(StopSilentAim)
-    end
-end)
-MakeSliderRow(AimScroll,"FOV RADIUS",10,300,150,0,14,function(v) State.SilentSettings.FOVRadius=v end)
+-- ================================================================
+-- CONSOLE BAR
+-- ================================================================
+local ConBar=Instance.new("Frame"); ConBar.Size=UDim2.new(1,0,0,56); ConBar.Position=UDim2.new(0,0,1,-58)
+ConBar.BackgroundColor3=CFG.Surface; ConBar.BorderSizePixel=0; ConBar.Parent=Win
+Str(ConBar,CFG.Border,1); Pad(ConBar,3,6,3,6)
 
-local saPartLblRow=Instance.new("Frame"); saPartLblRow.Size=UDim2.new(1,0,0,14); saPartLblRow.BackgroundTransparency=1; saPartLblRow.LayoutOrder=15; saPartLblRow.Parent=AimScroll
-Lbl(saPartLblRow,"TARGET PART:",11,CFG.TextMuted)
+local ConScr=Instance.new("ScrollingFrame"); ConScr.Size=UDim2.new(1,0,1,0)
+ConScr.BackgroundTransparency=1; ConScr.ScrollBarThickness=0
+ConScr.CanvasSize=UDim2.new(0,0,0,0); ConScr.AutomaticCanvasSize=Enum.AutomaticSize.Y; ConScr.Parent=ConBar
+local CL=Instance.new("UIListLayout"); CL.SortOrder=Enum.SortOrder.LayoutOrder; CL.Padding=UDim.new(0,1); CL.Parent=ConScr
 
-MakePartSelector(AimScroll,16,partList,"Head",function(v)
-    State.SilentSettings.LockPart=v; Log("SA TARGET: "..v)
-end)
-
-MakeToggleRow(AimScroll,"CHECK FOV",true,17,function(v) State.SilentSettings.CheckFOV=v end)
-MakeToggleRow(AimScroll,"ALIVE CHECK",true,18,function(v) State.SilentSettings.AliveCheck=v end)
-MakeToggleRow(AimScroll,"TEAM CHECK",false,19,function(v) State.SilentSettings.TeamCheck=v end)
-
-local saHintRow=Instance.new("Frame"); saHintRow.Size=UDim2.new(1,0,0,12); saHintRow.BackgroundTransparency=1; saHintRow.LayoutOrder=20; saHintRow.Parent=AimScroll
-Lbl(saHintRow,"NEEDS GETRAWMETATABLE + SETREADONLY",10,CFG.TextMuted,Enum.TextXAlignment.Center).Size=UDim2.new(1,0,1,0)
-
--- ---- TRIGGERBOT Section ----
-SectionLbl(AimScroll,"TRIGGERBOT",21)
-MakeToggleRow(AimScroll,"TRIGGERBOT",false,22,function(v)
-    State.TriggerOn=v
-    if v then StartTriggerbot() else StopTriggerbot() end
-end)
-MakeSliderRow(AimScroll,"TRIGGER DELAY",0,0.5,0.05,2,23,function(v) State.TriggerDelay=v end)
-
-local tbHintRow=Instance.new("Frame"); tbHintRow.Size=UDim2.new(1,0,0,12); tbHintRow.BackgroundTransparency=1; tbHintRow.LayoutOrder=24; tbHintRow.Parent=AimScroll
-Lbl(tbHintRow,"NEEDS MOUSE1PRESS EXECUTOR SUPPORT",10,CFG.TextMuted,Enum.TextXAlignment.Center).Size=UDim2.new(1,0,1,0)
-
---// ============================================================
---// TAB: MISC
---// ============================================================
-local _, MiscScroll = ScrollTab("MISC")
-
-SectionLbl(MiscScroll,"WEAPON MODS",1)
-
-MakeToggleRow(MiscScroll,"NO SPREAD",false,2,function(v)
-    State.NoSpread=v; RefreshMiscHook()
-    if not State.MiscHooked and v then Log("NO SPREAD: UNSUPPORTED EXECUTOR") end
-end)
-MakeToggleRow(MiscScroll,"NO RECOIL",false,3,function(v)
-    State.NoRecoil=v; RefreshMiscHook()
-    if not State.MiscHooked and v then Log("NO RECOIL: UNSUPPORTED EXECUTOR") end
-end)
-MakeToggleRow(MiscScroll,"RAPID FIRE",false,4,function(v)
-    State.RapidFire=v; RefreshMiscHook()
-    if not State.MiscHooked and v then Log("RAPID FIRE: UNSUPPORTED EXECUTOR") end
-end)
-MakeToggleRow(MiscScroll,"WALLBANG",false,5,function(v)
-    State.Wallbang=v; RefreshMiscHook()
-    if not State.MiscHooked and v then Log("WALLBANG: UNSUPPORTED EXECUTOR") end
-end)
-
-local miscHintRow=Instance.new("Frame"); miscHintRow.Size=UDim2.new(1,0,0,12); miscHintRow.BackgroundTransparency=1; miscHintRow.LayoutOrder=6; miscHintRow.Parent=MiscScroll
-Lbl(miscHintRow,"ALL WEAPON MODS NEED GETRAWMETATABLE",10,CFG.TextMuted,Enum.TextXAlignment.Center).Size=UDim2.new(1,0,1,0)
-
---// ============================================================
---// CONSOLE BAR
---// ============================================================
-local ConsoleBar = Instance.new("Frame")
-ConsoleBar.Size             = UDim2.new(1,0,0,56)
-ConsoleBar.Position         = UDim2.new(0,0,1,-58)
-ConsoleBar.BackgroundColor3 = CFG.Surface
-ConsoleBar.BorderSizePixel  = 0
-ConsoleBar.Parent           = Window
-Stroke(ConsoleBar,CFG.Border,1); Pad(ConsoleBar,3,6,3,6)
-
-local ConsoleScroll = Instance.new("ScrollingFrame")
-ConsoleScroll.Size               = UDim2.new(1,0,1,0)
-ConsoleScroll.BackgroundTransparency = 1
-ConsoleScroll.ScrollBarThickness = 0
-ConsoleScroll.CanvasSize         = UDim2.new(0,0,0,0)
-ConsoleScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ConsoleScroll.Parent             = ConsoleBar
-
-local CLayout = Instance.new("UIListLayout")
-CLayout.SortOrder = Enum.SortOrder.LayoutOrder; CLayout.Padding = UDim.new(0,1); CLayout.Parent = ConsoleScroll
-
-local logOrder = 0
-local rawLog   = Log
-Log = function(msg)
-    rawLog(msg)
-    logOrder = logOrder + 1
-    local line = Instance.new("TextLabel")
-    line.Size              = UDim2.new(1,0,0,12)
-    line.BackgroundTransparency = 1
-    line.Text              = string.format("> [%.1fs] %s", os.clock(), msg)
-    line.TextColor3        = Color3.fromRGB(63,185,80)
-    line.TextSize          = 10
-    line.Font              = PF
-    line.TextXAlignment    = Enum.TextXAlignment.Left
-    line.LayoutOrder       = logOrder
-    line.Parent            = ConsoleScroll
-    task.defer(function() ConsoleScroll.CanvasPosition = Vector2.new(0,math.huge) end)
+local logOrd=0
+LogFn=function(msg)
+    logOrd=logOrd+1
+    local line=Instance.new("TextLabel"); line.Size=UDim2.new(1,0,0,12); line.BackgroundTransparency=1
+    line.Text="> "..tostring(msg); line.TextColor3=Color3.fromRGB(63,185,80); line.TextSize=10
+    line.Font=PF; line.TextXAlignment=Enum.TextXAlignment.Left; line.LayoutOrder=logOrd; line.Parent=ConScr
+    task.defer(function() ConScr.CanvasPosition=Vector2.new(0,math.huge) end)
 end
 
---// ============================================================
---// TOGGLE VISIBILITY
---// ============================================================
-UserInputService.InputBegan:Connect(function(input, gpe)
+-- ================================================================
+-- TOGGLE KEY
+-- ================================================================
+UserInputService.InputBegan:Connect(function(input,gpe)
     if gpe then return end
-    if input.KeyCode == CFG.ToggleKey then
-        State.Visible  = not State.Visible
-        Window.Visible = State.Visible
-    end
+    if input.KeyCode==CFG.ToggleKey then S.Visible=not S.Visible; Win.Visible=S.Visible end
 end)
 
---// ============================================================
---// INIT
---// ============================================================
+-- ================================================================
+-- INIT
+-- ================================================================
 SetTab("PLAYERS")
 Log("ZARCWARE PREMIUM LOADED")
 Log("TOGGLE: RIGHT SHIFT")
-Log(#Players:GetPlayers().." PLAYER(S) IN SERVER")
+Log(#Players:GetPlayers().." PLAYER(S)")
