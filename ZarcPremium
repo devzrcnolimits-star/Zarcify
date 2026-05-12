@@ -572,7 +572,19 @@ local function StartTriggerbot()
                     if hum and hum.Health>0 then
                         task.wait(State.TriggerDelay)
                         -- simulate mouse click
-                        mouse1press(); task.wait(0.05); mouse1release()
+                        if mouse1press then
+                            pcall(mouse1press)
+                            task.wait(0.05)
+                            pcall(mouse1release)
+                        else
+                            -- fallback: use InputService simulation
+                            local vInputService = game:GetService("VirtualInputManager")
+                            pcall(function()
+                                vInputService:SendMouseButtonEvent(0,0,0,true,game,0)
+                                task.wait(0.05)
+                                vInputService:SendMouseButtonEvent(0,0,0,false,game,0)
+                            end)
+                        end
                     end
                 end
             end
@@ -1211,7 +1223,7 @@ local logOrder = 0
 local rawLog   = Log
 Log = function(msg)
     rawLog(msg)
-    logOrder += 1
+    logOrder = logOrder + 1
     local line = Instance.new("TextLabel")
     line.Size              = UDim2.new(1,0,0,12)
     line.BackgroundTransparency = 1
