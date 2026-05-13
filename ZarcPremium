@@ -1,4 +1,5 @@
--- ZarcWare Premium
+-- ZarcWare Premium | Luau
+-- Compatible: JJSploit, Madium, Fluxus, Krnl, Solara
 -- loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/ZarcPremium"))()
 
 local Players          = game:GetService("Players")
@@ -325,29 +326,23 @@ end
 -- AIMBOT ENGINE
 -- ================================================================
 local function AimbotFind()
-    local cam=workspace.CurrentCamera
-    local mp=UserInputService:GetMouseLocation()
-    local cfg=S.AimbotCfg
-    local best,bd=nil,cfg.FOVAmount
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p~=LocalPlayer then
-            local ch=p.Character
-            if ch then
-                local pt=ch:FindFirstChild(cfg.LockPart) or ch:FindFirstChild("HumanoidRootPart")
-                local hm=ch:FindFirstChildOfClass("Humanoid")
-                local skip=false
-                if not pt or not hm then skip=true end
-                if not skip and cfg.AliveCheck and hm.Health<=0 then skip=true end
-                if not skip and cfg.TeamCheck and p.Team==LocalPlayer.Team then skip=true end
-                if not skip then
-                    local v,on=cam:WorldToViewportPoint(pt.Position)
-                    if on then
-                        local d=(Vector2.new(mp.X,mp.Y)-Vector2.new(v.X,v.Y)).Magnitude
-                        if d<bd then bd=d; best=p end
-                    end
-                end
-            end
-        end
+    local cam = workspace.CurrentCamera
+    local mp = UserInputService:GetMouseLocation()
+    local cfg = S.AimbotCfg
+    local best, bd = nil, cfg.FOVAmount
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer then continue end
+        local ch = p.Character
+        if not ch then continue end
+        local pt = ch:FindFirstChild(cfg.LockPart) or ch:FindFirstChild("HumanoidRootPart")
+        local hm = ch:FindFirstChildOfClass("Humanoid")
+        if not pt or not hm then continue end
+        if cfg.AliveCheck and hm.Health <= 0 then continue end
+        if cfg.TeamCheck and p.Team == LocalPlayer.Team then continue end
+        local v, on = cam:WorldToViewportPoint(pt.Position)
+        if not on then continue end
+        local d = (Vector2.new(mp.X, mp.Y) - Vector2.new(v.X, v.Y)).Magnitude
+        if d < bd then bd = d; best = p end
     end
     return best
 end
@@ -422,29 +417,23 @@ end
 -- SILENT AIM ENGINE
 -- ================================================================
 local function SilentFind()
-    local cam=workspace.CurrentCamera
-    local mp=UserInputService:GetMouseLocation()
-    local cfg=S.SilentCfg
-    local best,bd=nil,cfg.FOVRadius
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p~=LocalPlayer then
-            local ch=p.Character
-            if ch then
-                local pt=ch:FindFirstChild(cfg.LockPart) or ch:FindFirstChild("HumanoidRootPart")
-                local hm=ch:FindFirstChildOfClass("Humanoid")
-                local skip=false
-                if not pt or not hm then skip=true end
-                if not skip and cfg.AliveCheck and hm.Health<=0 then skip=true end
-                if not skip and cfg.TeamCheck and p.Team==LocalPlayer.Team then skip=true end
-                if not skip then
-                    local v,on=cam:WorldToViewportPoint(pt.Position)
-                    if on then
-                        local d=(Vector2.new(mp.X,mp.Y)-Vector2.new(v.X,v.Y)).Magnitude
-                        if (not cfg.CheckFOV or d<bd) then bd=d; best=pt end
-                    end
-                end
-            end
-        end
+    local cam = workspace.CurrentCamera
+    local mp = UserInputService:GetMouseLocation()
+    local cfg = S.SilentCfg
+    local best, bd = nil, cfg.FOVRadius
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer then continue end
+        local ch = p.Character
+        if not ch then continue end
+        local pt = ch:FindFirstChild(cfg.LockPart) or ch:FindFirstChild("HumanoidRootPart")
+        local hm = ch:FindFirstChildOfClass("Humanoid")
+        if not pt or not hm then continue end
+        if cfg.AliveCheck and hm.Health <= 0 then continue end
+        if cfg.TeamCheck and p.Team == LocalPlayer.Team then continue end
+        local v, on = cam:WorldToViewportPoint(pt.Position)
+        if not on then continue end
+        local d = (Vector2.new(mp.X, mp.Y) - Vector2.new(v.X, v.Y)).Magnitude
+        if not cfg.CheckFOV or d < bd then bd = d; best = pt end
     end
     return best
 end
@@ -812,7 +801,7 @@ local function MkPRow(player)
     PRows[player]={f=row,s=sk,d=dot}
 end
 for _,p in ipairs(Players:GetPlayers()) do MkPRow(p) end
-Players.PlayerAdded:Connect(MkPRow)
+Players.PlayerAdded:Connect(function(p) MkPRow(p) end)
 Players.PlayerRemoving:Connect(function(p)
     if PRows[p] then PRows[p].f:Destroy(); PRows[p]=nil end
     if S.SelectedPlayer==p then S.SelectedPlayer=nil end
@@ -937,7 +926,7 @@ local CL=Instance.new("UIListLayout"); CL.SortOrder=Enum.SortOrder.LayoutOrder; 
 
 local logOrd=0
 LogFn=function(msg)
-    logOrd=logOrd+1
+    logOrd += 1
     local line=Instance.new("TextLabel"); line.Size=UDim2.new(1,0,0,12); line.BackgroundTransparency=1
     line.Text="> "..tostring(msg); line.TextColor3=Color3.fromRGB(63,185,80); line.TextSize=10
     line.Font=PF; line.TextXAlignment=Enum.TextXAlignment.Left; line.LayoutOrder=logOrd; line.Parent=ConScr
