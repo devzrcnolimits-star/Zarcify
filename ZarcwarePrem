@@ -1,7 +1,7 @@
 --[[
     ZarcWare Premium | Luau
     Compatible: JJSploit, Madium, Fluxus, Krnl, Synapse
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/ZarcPremium"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/devzrcnolimits-star/Zarcify/refs/heads/main/ZarcwarePrem"))()
 ]]
 
 local Players = game:GetService("Players")
